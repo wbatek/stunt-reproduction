@@ -24,9 +24,9 @@ def protonet_step(P, step, model, criterion, optimizer, batch, metric_logger, lo
     assert not P.regression
 
     train_inputs, train_targets = batch['train']
-    num_ways = len(set(list(train_targets[0].numpy())))
+    #num_ways = len(set(list(train_targets[0].numpy())))
+    num_ways = P.num_ways
     test_inputs, test_targets = batch['test']
-        
 
     train_inputs = train_inputs.to(device)
     train_targets = train_targets.to(device)

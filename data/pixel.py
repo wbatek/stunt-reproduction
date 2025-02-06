@@ -4,29 +4,27 @@ import torch
 import os
 import copy
 import faiss
-from sklearn.mixture import GaussianMixture
 
 
-class Income(object):
-    def __init__(self, P, tabular_size, seed, source, shot, tasks_per_batch, test_num_way, query, eps):
+class Pixel(object):
+    def __init__(self, P, tabular_size, seed, source, shot, tasks_per_batch, test_num_way, query):
         super().__init__()
-        self.num_classes = 2
+        self.num_classes = 10
         self.tabular_size = tabular_size
         self.source = source
         self.shot = shot
         self.query = query
         self.tasks_per_batch = tasks_per_batch
-        self.unlabeled_x = np.load('./data/income/train_x.npy')
-        self.test_x = np.load('./data/income/xtest.npy')
-        self.test_y = np.load('./data/income/ytest.npy')
-        self.val_x = np.load('./data/income/val_x.npy')
+        self.unlabeled_x = np.load('./data/pixel/train_x.npy')
+        self.test_x = np.load('./data/pixel/xtest.npy')
+        self.test_y = np.load('./data/pixel/ytest.npy')
+        self.val_x = np.load('./data/pixel/val_x.npy')
         self.val_y = np.load(
-            './data/income/pseudo_val_y.npy')  # val_y is given from pseudo-validaiton scheme with STUNT
+            './data/pixel/yval.npy')  # val_y is given from pseudo-validaiton scheme with STUNT
         self.test_num_way = test_num_way
         self.test_rng = np.random.RandomState(seed)
         self.val_rng = np.random.RandomState(seed)
         self.invalid_count = 0
-        self.eps = eps
 
     def __next__(self):
         return self.get_batch()
@@ -113,15 +111,15 @@ class Income(object):
                     class_list, counts = np.unique(y, return_counts=True)
                     min_count = min(counts)
 
-                    masked_val_x = np.ascontiguousarray(self.val_x[:, task_idx], dtype=np.float32)
-                    D_val, I_val = kmeans.index.search(masked_val_x, 1)
-
-                    from sklearn.metrics import adjusted_rand_score
-                    ari = adjusted_rand_score(self.val_y, I_val[:, 0])
-                    if ari < self.eps:
-                        self.invalid_count += 1
-                        print(f'Invalid count: {self.invalid_count}')
-                        min_count = 0
+                    # masked_val_x = np.ascontiguousarray(self.val_x[:, task_idx], dtype=np.float32)
+                    # D_val, I_val = kmeans.index.search(masked_val_x, 1)
+                    #
+                    # from sklearn.metrics import adjusted_rand_score
+                    # ari = adjusted_rand_score(self.val_y, I_val[:, 0])
+                    # if ari < self.eps:
+                    #     self.invalid_count += 1
+                    #     print(f'Invalid count: {self.invalid_count}')
+                    #     min_count = 0
 
                 # num_to_permute - liczba wierszy w tabeli
                 num_to_permute = x.shape[0]
@@ -133,7 +131,8 @@ class Income(object):
 
                 # wybor n_way klas z listy klas
                 #print(class_list, num_way)
-                classes = class_list
+                #classes = class_list
+                classes = np.random.choice(class_list, num_way, replace=False)
 
                 # konstrukcja support i query setow
                 support_idx = []
@@ -222,7 +221,7 @@ class Income(object):
             query_set_x = []
             query_set_y = []
 
-            selected_classes = np.random.choice(range(num_classes), self.test_num_way, replace=False)
+            selected_classes = np.random.choice(range(num_classes), self.num_classes, replace=False)
             for class_id in selected_classes:
                 class_indices = np.where(self.test_y == class_id)[0]
                 np.random.shuffle(class_indices)

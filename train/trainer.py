@@ -1,5 +1,4 @@
 import time
-from collections import OrderedDict
 
 import torch
 import torch.nn as nn
@@ -25,6 +24,7 @@ def meta_trainer(P, train_func, test_func, model, optimizer, train_loader, test_
     """ training start """
     logger.log_dirname(f"Start training")
     for step in range(start_step, P.outer_steps + 1):
+        print(step)
 
         stime = time.time()
         train_batch = next(train_loader)
@@ -36,7 +36,7 @@ def meta_trainer(P, train_func, test_func, model, optimizer, train_loader, test_
         """ evaluation & save the best model """
         if step % P.eval_step == 0:
             acc = test_func(P, model, test_loader, criterion, step, logger=logger, **kwargs_test)
- 
+
             if best < acc:
                 best = acc
                 save_checkpoint(P, step, best, model.state_dict(),
