@@ -135,10 +135,6 @@ class Optdigits(object):
                 support_idx = np.concatenate(support_idx)
                 query_idx = np.concatenate(query_idx)
 
-                # czyli z tego co rozumiem, to nie ma tu kroku x~ = m * x^ + (1-m) * x - zastapiony permutacja danych - linie 113-117
-                # na koniec nie bierzemy wszystkich danych, tylko dane z num_way klastrów, tzn. discardujemy pozostałe klastry
-                # wiec niezgodnosc z praca? nie bylo nigdzie wspomniane o tym, ze bierzemy tylko podzbior danych
-
                 support_x = tmp_x[support_idx]
                 query_x = tmp_x[query_idx]
                 s_y = y[support_idx]
