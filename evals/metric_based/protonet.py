@@ -4,7 +4,6 @@ from torchmeta.utils.prototype import get_prototypes
 
 from train.metric_based import get_accuracy
 from utils import MetricLogger
-import torch.nn.functional as F
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -32,7 +31,8 @@ def test_classifier(P, model, loader, criterion, steps, logger=None):
 
         train_inputs, train_targets = batch['train']
 
-        num_ways = len(set(list(train_targets[0].numpy())))
+        # num_ways = len(set(list(train_targets[0].numpy())))
+        num_ways = P.num_ways
         train_inputs = train_inputs.to(device)
         train_targets = train_targets.to(device)
         with torch.no_grad():
@@ -44,7 +44,7 @@ def test_classifier(P, model, loader, criterion, steps, logger=None):
         with torch.no_grad():
             test_embeddings = model(test_inputs)
 
-        prototypes = get_prototypes(train_embeddings, train_targets, num_ways)
+        prototypes = get_prototypes(train_embeddings, train_targets, loader.num_classes)
 
         squared_distances = torch.sum((prototypes.unsqueeze(2)
                                     - test_embeddings.unsqueeze(1)) ** 2, dim=-1)

@@ -4,10 +4,8 @@ import torch
 import os
 import copy
 import faiss
-from sklearn.mixture import GaussianMixture
 
-
-class Income(object):
+class Diabetes(object):
     def __init__(self, P, tabular_size, seed, source, shot, tasks_per_batch, test_num_way, query, eps):
         super().__init__()
         self.num_classes = 2
@@ -16,12 +14,12 @@ class Income(object):
         self.shot = shot
         self.query = query
         self.tasks_per_batch = tasks_per_batch
-        self.unlabeled_x = np.load('./data/income/train_x.npy')
-        self.test_x = np.load('./data/income/xtest.npy')
-        self.test_y = np.load('./data/income/ytest.npy')
-        self.val_x = np.load('./data/income/val_x.npy')
+        self.unlabeled_x = np.load('./data/diabetes/train_x.npy')
+        self.test_x = np.load('./data/diabetes/xtest.npy')
+        self.test_y = np.load('./data/diabetes/ytest.npy')
+        self.val_x = np.load('./data/diabetes/val_x.npy')
         self.val_y = np.load(
-            './data/income/pseudo_val_y.npy')  # val_y is given from pseudo-validaiton scheme with STUNT
+            './data/diabetes/yval.npy')
         self.test_num_way = test_num_way
         self.test_rng = np.random.RandomState(seed)
         self.val_rng = np.random.RandomState(seed)
@@ -57,7 +55,7 @@ class Income(object):
 
             if self.source == 'val':
 
-                classes = np.random.choice(class_list, num_way, replace=False)
+                classes = np.random.choice(class_list, num_way, replace=True)
                 support_idx = []
                 query_idx = []
                 for k in classes:
@@ -99,7 +97,7 @@ class Income(object):
                     task_idx = np.random.choice([i for i in range(x.shape[1])], col, replace=False)
                     # masked_x - wyfiltrowany podzbior kolumn
                     masked_x = np.ascontiguousarray(x[:, task_idx], dtype=np.float32)
-                    # # k-means model
+                    # k-means model
                     kmeans = faiss.Kmeans(masked_x.shape[1], num_way, niter=20, nredo=1, verbose=False,
                                           min_points_per_centroid=self.shot + self.query, gpu=1)
                     kmeans.train(masked_x)
@@ -111,17 +109,26 @@ class Income(object):
                     y = I[:, 0].astype(np.int32)
                     # class_list - indeksy klastrów, counts - ile punktow w kazdym klastrze
                     class_list, counts = np.unique(y, return_counts=True)
+
+                    # Filter out small clusters
+                    valid_classes = [cls for cls, count in zip(class_list, counts) if count >= (self.shot + self.query)]
+                    if len(valid_classes) < num_way:
+                        print("WARNING: Not enough valid clusters! Retrying...")
+                        continue  # Restart the loop to find a better split
+
                     min_count = min(counts)
 
-                    masked_val_x = np.ascontiguousarray(self.val_x[:, task_idx], dtype=np.float32)
-                    D_val, I_val = kmeans.index.search(masked_val_x, 1)
 
-                    from sklearn.metrics import adjusted_rand_score
-                    ari = adjusted_rand_score(self.val_y, I_val[:, 0])
-                    if ari < self.eps:
-                        self.invalid_count += 1
-                        print(f'Invalid count: {self.invalid_count}')
-                        min_count = 0
+
+                    # masked_val_x = np.ascontiguousarray(self.val_x[:, task_idx], dtype=np.float32)
+                    # D_val, I_val = kmeans.index.search(masked_val_x, 1)
+
+                    # from sklearn.metrics import adjusted_rand_score
+                    # ari = adjusted_rand_score(self.val_y, I_val[:, 0])
+                    # if ari < self.eps:
+                    #     self.invalid_count += 1
+                    #     print(f'Invalid count: {self.invalid_count}')
+                    #     min_count = 0
 
                 # num_to_permute - liczba wierszy w tabeli
                 num_to_permute = x.shape[0]
@@ -132,7 +139,7 @@ class Income(object):
                     tmp_x[:, t_idx] = tmp_x[:, t_idx][rand_perm]
 
                 # wybor n_way klas z listy klas
-                #print(class_list, num_way)
+                #classes = np.random.choice(class_list, num_way, replace=True)
                 classes = class_list
 
                 # konstrukcja support i query setow
@@ -148,6 +155,10 @@ class Income(object):
                     query_idx.append(k_idx[self.shot:self.shot + self.query])
                 support_idx = np.concatenate(support_idx)
                 query_idx = np.concatenate(query_idx)
+
+                # czyli z tego co rozumiem, to nie ma tu kroku x~ = m * x^ + (1-m) * x - zastapiony permutacja danych - linie 113-117
+                # na koniec nie bierzemy wszystkich danych, tylko dane z num_way klastrów, tzn. discardujemy pozostałe klastry
+                # wiec niezgodnosc z praca? nie bylo nigdzie wspomniane o tym, ze bierzemy tylko podzbior danych
 
                 support_x = tmp_x[support_idx]
                 query_x = tmp_x[query_idx]
@@ -176,6 +187,9 @@ class Income(object):
             xq.append(xq_k)
             ys.append(ys_k)
             yq.append(yq_k)
+
+        for arr in xs:
+            print(arr.shape)
 
         xs, ys = np.stack(xs, 0), np.stack(ys, 0)
         xq, yq = np.stack(xq, 0), np.stack(yq, 0)
