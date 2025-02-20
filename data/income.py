@@ -88,52 +88,35 @@ class Income(object):
                 query_sety.append(query_y)
 
             elif self.source == 'train':
-                tmp_x = copy.deepcopy(x)
+                W = np.random.randn(self.tabular_size, self.tabular_size)
+                W_inv = np.linalg.inv(W)
+                z = np.dot(copy.deepcopy(x), W)
                 min_count = 0
                 while min_count < (self.shot + self.query):
-                    # U(min_col, max_col)
                     min_col = int(x.shape[1] * 0.2)
                     max_col = int(x.shape[1] * 0.5)
-                    # wybor kolumn
                     col = np.random.choice(range(min_col, max_col), 1, replace=False)[0]
                     task_idx = np.random.choice([i for i in range(x.shape[1])], col, replace=False)
-                    # masked_x - wyfiltrowany podzbior kolumn
-                    masked_x = np.ascontiguousarray(x[:, task_idx], dtype=np.float32)
-                    # # k-means model
-                    kmeans = faiss.Kmeans(masked_x.shape[1], num_way, niter=20, nredo=1, verbose=False,
+                    masked_z = np.ascontiguousarray(z[:, task_idx], dtype=np.float32)
+                    kmeans = faiss.Kmeans(masked_z.shape[1], num_way, niter=20, nredo=1, verbose=False,
                                           min_points_per_centroid=self.shot + self.query, gpu=1)
-                    kmeans.train(masked_x)
-                    # szukamy dla kazdego elementu z masked_x najblizszy cluster
-                    # D - odleglosci do najblizszych klastrow
-                    # I - indeksy najblizszych klastrow dla kazdego punktu
-                    D, I = kmeans.index.search(masked_x, 1)
-                    # y - indeksy klastrow -> integer label
+                    kmeans.train(masked_z)
+                    D, I = kmeans.index.search(masked_z, 1)
                     y = I[:, 0].astype(np.int32)
-                    # class_list - indeksy klastrów, counts - ile punktow w kazdym klastrze
                     class_list, counts = np.unique(y, return_counts=True)
                     min_count = min(counts)
 
-                    masked_val_x = np.ascontiguousarray(self.val_x[:, task_idx], dtype=np.float32)
-                    D_val, I_val = kmeans.index.search(masked_val_x, 1)
-
-                    from sklearn.metrics import adjusted_rand_score
-                    ari = adjusted_rand_score(self.val_y, I_val[:, 0])
-                    if ari < self.eps:
-                        self.invalid_count += 1
-                        print(f'Invalid count: {self.invalid_count}')
-                        min_count = 0
-
-                # num_to_permute - liczba wierszy w tabeli
-                num_to_permute = x.shape[0]
+                num_to_permute = z.shape[0]
+                # for i in range(col):
+                #     rand_perm = np.random.permutation(num_to_permute)
+                #     z[:, i] = z[:, i][rand_perm]
                 for t_idx in task_idx:
-                    # permutacja wierszy z wyselekcjonowanych wczesniej kolumn
                     rand_perm = np.random.permutation(num_to_permute)
-                    # w kazdej kolumnie permutujemy wartosci
-                    tmp_x[:, t_idx] = tmp_x[:, t_idx][rand_perm]
+                    z[:, t_idx] = z[:, t_idx][rand_perm]
+                tmp_x = np.dot(z, W_inv)
 
-                # wybor n_way klas z listy klas
-                #print(class_list, num_way)
-                classes = class_list
+                #classes = class_list
+                classes = np.random.choice(class_list, num_way, replace=False)
 
                 # konstrukcja support i query setow
                 support_idx = []
