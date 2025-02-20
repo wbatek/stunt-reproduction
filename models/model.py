@@ -4,7 +4,7 @@ dataset_to_in = {
     'income': 105,
     'diabetes': 8,
     'optdigits': 64,
-    'cmc': 9,
+    'cmc': 24,
     'dna': 180,
     'karhunen': 64,
     'semeion': 256,
