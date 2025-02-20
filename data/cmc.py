@@ -4,6 +4,7 @@ import torch
 import os
 import copy
 import faiss
+from sklearn.cluster import KMeans
 
 
 class Cmc(object):
@@ -88,27 +89,30 @@ class Cmc(object):
             elif self.source == 'train':
                 tmp_x = copy.deepcopy(x)
                 min_count = 0
+
                 while min_count < (self.shot + self.query):
                     # U(min_col, max_col)
-                    min_col = int(x.shape[1] * 0.2)
-                    max_col = int(x.shape[1] * 0.5)
-                    # wybor kolumn
+                    min_col = int(x.shape[1] * 0.4)
+                    max_col = int(x.shape[1] * 0.7)
+
+                    # wybór kolumn
                     col = np.random.choice(range(min_col, max_col), 1, replace=False)[0]
                     task_idx = np.random.choice([i for i in range(x.shape[1])], col, replace=False)
-                    # masked_x - wyfiltrowany podzbior kolumn
+
+                    # masked_x - wyfiltrowany podzbiór kolumn
                     masked_x = np.ascontiguousarray(x[:, task_idx], dtype=np.float32)
-                    # # k-means model
-                    kmeans = faiss.Kmeans(masked_x.shape[1], num_way, niter=20, nredo=1, verbose=False,
-                                          min_points_per_centroid=self.shot + self.query, gpu=1)
-                    kmeans.train(masked_x)
-                    # szukamy dla kazdego elementu z masked_x najblizszy cluster
-                    # D - odleglosci do najblizszych klastrow
-                    # I - indeksy najblizszych klastrow dla kazdego punktu
-                    D, I = kmeans.index.search(masked_x, 1)
-                    # y - indeksy klastrow -> integer label
-                    y = I[:, 0].astype(np.int32)
-                    # class_list - indeksy klastrów, counts - ile punktow w kazdym klastrze
+
+                    # K-Means model
+                    kmeans = KMeans(n_clusters=num_way, n_init=1, max_iter=20, verbose=0)
+                    kmeans.fit(masked_x)
+
+                    # y - indeksy klastrów -> integer label
+                    y = kmeans.labels_
+
+                    # class_list - indeksy klastrów, counts - ile punktów w każdym klastrze
                     class_list, counts = np.unique(y, return_counts=True)
+
+                    print(class_list, counts)
                     min_count = min(counts)
 
                     # masked_val_x = np.ascontiguousarray(self.val_x[:, task_idx], dtype=np.float32)
@@ -132,7 +136,7 @@ class Cmc(object):
                 # wybor n_way klas z listy klas
                 #print(class_list, num_way)
                 #classes = class_list
-                classes = np.random.choice(class_list, num_way, replace=True)
+                classes = np.random.choice(class_list, num_way, replace=False)
 
                 # konstrukcja support i query setow
                 support_idx = []
