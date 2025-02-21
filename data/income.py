@@ -1,3 +1,4 @@
+from collections import defaultdict
 from re import I
 import numpy as np
 import torch
@@ -27,6 +28,7 @@ class Income(object):
         self.val_rng = np.random.RandomState(seed)
         self.invalid_count = 0
         self.eps = eps
+        self.train_y = np.load('./data/income/ytrain.npy')[:24129]
 
     def __next__(self):
         return self.get_batch()
@@ -90,14 +92,14 @@ class Income(object):
             elif self.source == 'train':
                 W = np.random.randn(self.tabular_size, self.tabular_size)
                 W_inv = np.linalg.inv(W)
-                z = np.dot(copy.deepcopy(x), W)
+                z = x @ W
+
                 min_count = 0
                 while min_count < (self.shot + self.query):
                     min_col = int(x.shape[1] * 0.2)
                     max_col = int(x.shape[1] * 0.5)
                     col = np.random.choice(range(min_col, max_col), 1, replace=False)[0]
-                    task_idx = np.random.choice([i for i in range(x.shape[1])], col, replace=False)
-                    masked_z = np.ascontiguousarray(z[:, task_idx], dtype=np.float32)
+                    masked_z = np.ascontiguousarray(z[:, : col + 1], dtype=np.float32)
                     kmeans = faiss.Kmeans(masked_z.shape[1], num_way, niter=20, nredo=1, verbose=False,
                                           min_points_per_centroid=self.shot + self.query, gpu=1)
                     kmeans.train(masked_z)
@@ -106,14 +108,43 @@ class Income(object):
                     class_list, counts = np.unique(y, return_counts=True)
                     min_count = min(counts)
 
+                    unique_classes = np.unique(self.val_y)
+                    sampled_indices = []
+                    for cls in unique_classes:
+                        class_indices = np.where(self.val_y == cls)[0]
+                        sampled_indices.extend(np.random.choice(class_indices, 2, replace=False))
+
+                    sampled_x = self.val_x[sampled_indices]
+                    sampled_y = self.val_y[sampled_indices]
+
+                    sampled_z = sampled_x @ W
+
+                    masked_sampled_z = np.ascontiguousarray(sampled_z[:, : col + 1], dtype=np.float32)
+                    sampled_D, sampled_I = kmeans.index.search(masked_sampled_z, 1)
+                    clustered_y = sampled_I[:, 0].astype(np.int32)
+
+                    valid_clustering = True
+                    for cluster_label in np.unique(clustered_y):
+                        indices_in_cluster = np.where(clustered_y == cluster_label)[0]
+                        class_labels_in_cluster = sampled_y[indices_in_cluster]
+                        if len(np.unique(class_labels_in_cluster)) > 1:
+                            valid_clustering = False
+                            break
+
+                    if not valid_clustering:
+                        min_count = 0
+
+
                 num_to_permute = z.shape[0]
-                # for i in range(col):
+                # for i in range(col + 1):
                 #     rand_perm = np.random.permutation(num_to_permute)
                 #     z[:, i] = z[:, i][rand_perm]
-                for t_idx in task_idx:
-                    rand_perm = np.random.permutation(num_to_permute)
-                    z[:, t_idx] = z[:, t_idx][rand_perm]
-                tmp_x = np.dot(z, W_inv)
+                for i in range(col + 1):
+                    z[:, i] = 0
+                for i in range(z.shape[0]):
+                    z[i, :] = (z[i, :]) / (self.tabular_size - col)
+
+                tmp_x = z @ W_inv
 
                 #classes = class_list
                 classes = np.random.choice(class_list, num_way, replace=False)
