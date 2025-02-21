@@ -113,23 +113,55 @@ class Income(object):
                     class_list, counts = np.unique(y, return_counts=True)
                     min_count = min(counts)
 
-                    masked_val_x = np.ascontiguousarray(self.val_x[:, task_idx], dtype=np.float32)
-                    D_val, I_val = kmeans.index.search(masked_val_x, 1)
-
-                    from sklearn.metrics import adjusted_rand_score
-                    ari = adjusted_rand_score(self.val_y, I_val[:, 0])
-                    if ari < self.eps:
-                        self.invalid_count += 1
-                        print(f'Invalid count: {self.invalid_count}')
+                    valid_classes = [cls for cls, count in zip(class_list, counts) if count >= (self.shot + self.query)]
+                    if len(valid_classes) < num_way:
+                        print("WARNING: Not enough valid clusters! Retrying...")
                         min_count = 0
+                    else:
+                        unique_classes = np.unique(self.val_y)
+                        sampled_indices = []
+                        for cls in unique_classes:
+                            class_indices = np.where(self.val_y == cls)[0]
+                            sampled_indices.extend(np.random.choice(class_indices, 2, replace=False))
 
-                # num_to_permute - liczba wierszy w tabeli
-                num_to_permute = x.shape[0]
+                        sampled_x = self.val_x[sampled_indices]
+                        sampled_y = self.val_y[sampled_indices]
+
+                        masked_sampled_z = np.ascontiguousarray(sampled_x[:, task_idx], dtype=np.float32)
+                        sampled_D, sampled_I = kmeans.index.search(masked_sampled_z, 1)
+                        clustered_y = sampled_I[:, 0].astype(np.int32)
+
+                        valid_clustering = True
+                        for cluster_label in np.unique(clustered_y):
+                            indices_in_cluster = np.where(clustered_y == cluster_label)[0]
+                            class_labels_in_cluster = sampled_y[indices_in_cluster]
+                            if len(np.unique(class_labels_in_cluster)) > 1:
+                                valid_clustering = False
+                                break
+
+                        if not valid_clustering:
+                            min_count = 0
+
+                    # masked_val_x = np.ascontiguousarray(self.val_x[:, task_idx], dtype=np.float32)
+                    # D_val, I_val = kmeans.index.search(masked_val_x, 1)
+                    #
+                    # from sklearn.metrics import adjusted_rand_score
+                    # ari = adjusted_rand_score(self.val_y, I_val[:, 0])
+                    # if ari < self.eps:
+                    #     self.invalid_count += 1
+                    #     print(f'Invalid count: {self.invalid_count}')
+                    #     min_count = 0
+
+                # num_to_permute = x.shape[0]
+                # for t_idx in task_idx:
+                #     # permutacja wierszy z wyselekcjonowanych wczesniej kolumn
+                #     rand_perm = np.random.permutation(num_to_permute)
+                #     # w kazdej kolumnie permutujemy wartosci
+                #     tmp_x[:, t_idx] = tmp_x[:, t_idx][rand_perm]
                 for t_idx in task_idx:
-                    # permutacja wierszy z wyselekcjonowanych wczesniej kolumn
-                    rand_perm = np.random.permutation(num_to_permute)
-                    # w kazdej kolumnie permutujemy wartosci
-                    tmp_x[:, t_idx] = tmp_x[:, t_idx][rand_perm]
+                    tmp_x[:, t_idx] = 0
+                for i in range(tmp_x.shape[0]):
+                    tmp_x[i, :] = tmp_x[i, :] / (self.tabular_size - col)
 
                 # wybor n_way klas z listy klas
                 #print(class_list, num_way)
@@ -176,7 +208,6 @@ class Income(object):
             xq.append(xq_k)
             ys.append(ys_k)
             yq.append(yq_k)
-
         xs, ys = np.stack(xs, 0), np.stack(ys, 0)
         xq, yq = np.stack(xq, 0), np.stack(yq, 0)
 
