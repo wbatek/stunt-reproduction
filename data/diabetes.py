@@ -113,7 +113,7 @@ class Diabetes(object):
                     # Filter out small clusters
                     valid_classes = [cls for cls, count in zip(class_list, counts) if count >= (self.shot + self.query)]
                     if len(valid_classes) < num_way:
-                        print("WARNING: Not enough valid clusters! Retrying...")
+                        # print("WARNING: Not enough valid clusters! Retrying...")
                         continue  # Restart the loop to find a better split
 
                     min_count = min(counts)
@@ -187,9 +187,6 @@ class Diabetes(object):
             xq.append(xq_k)
             ys.append(ys_k)
             yq.append(yq_k)
-
-        for arr in xs:
-            print(arr.shape)
 
         xs, ys = np.stack(xs, 0), np.stack(ys, 0)
         xq, yq = np.stack(xq, 0), np.stack(yq, 0)
