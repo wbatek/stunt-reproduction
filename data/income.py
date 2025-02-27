@@ -28,7 +28,7 @@ class Income(object):
         self.val_rng = np.random.RandomState(seed)
         self.invalid_count = 0
         self.eps = eps
-        self.train_y = np.load('./data/income/ytrain.npy')[:24129]
+        self.train_y = np.load('./data/income/ytrain.npy')
 
     def __next__(self):
         return self.get_batch()
@@ -90,7 +90,13 @@ class Income(object):
                 query_sety.append(query_y)
 
             elif self.source == 'train':
+                # 1) wylosowac macierz ortogonalna - QR lub gram-schmidt https://mathstoshare.com/2024/03/09/uniformly-sampling-orthogonal-matrices/
+                # dodatkowo przed k-meansem skalowanie danych
+                # 2) filtrowanie - 10 stałych sampli w każdej iteracji
                 W = np.random.randn(self.tabular_size, self.tabular_size)
+                Q, R = np.linalg.qr(W)
+                L = np.sign(np.diag(R))
+                W = Q * L[None, :]
                 W_inv = np.linalg.inv(W)
                 z = x @ W
 
