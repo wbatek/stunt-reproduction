@@ -61,7 +61,7 @@ def test(P, model, optimizer, criterion, logger, test_set):
     model.eval()
 
     with torch.no_grad():
-        for i in range(P.outer_steps):
+        for i in range(1000):
             print(i)
             batch = test_set.get_test_batch()
 
@@ -151,6 +151,7 @@ def main(rank, P):
         criterion = nn.CrossEntropyLoss()
 
         avg_acc = test(P, model, optimizer, criterion, logger, test_set)
+        print(avg_acc)
         #test_accuracies.append(avg_acc)
         """ close tensorboard """
         logger.close_writer()

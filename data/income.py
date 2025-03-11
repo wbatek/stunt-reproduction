@@ -5,7 +5,6 @@ import torch
 import os
 import copy
 import faiss
-from sklearn.mixture import GaussianMixture
 
 
 class Income(object):
@@ -93,19 +92,31 @@ class Income(object):
                 # 1) wylosowac macierz ortogonalna - QR lub gram-schmidt https://mathstoshare.com/2024/03/09/uniformly-sampling-orthogonal-matrices/
                 # dodatkowo przed k-meansem skalowanie danych
                 # 2) filtrowanie - 10 stałych sampli w każdej iteracji
-                W = np.random.randn(self.tabular_size, self.tabular_size)
-                Q, R = np.linalg.qr(W)
-                L = np.sign(np.diag(R))
-                W = Q * L[None, :]
-                W_inv = np.linalg.inv(W)
-                z = x @ W
 
                 min_count = 0
                 while min_count < (self.shot + self.query):
+                    # W = np.random.uniform(-1, 1, (self.tabular_size, self.tabular_size))
+                    # W = np.random.randn(self.tabular_size, self.tabular_size) * np.std(x, axis=0, keepdims=True).T
+                    W = np.eye(self.tabular_size)
+                    np.random.shuffle(W)
+                    W += np.random.normal(scale=0.1, size=W.shape)
+
+                    # Q - macierz ortonormalna
+                    Q, R = np.linalg.qr(W)
+                    L = np.sign(np.diag(R))
+                    W = Q * L[None, :]
+                    W_inv = np.linalg.inv(W)
+                    z = x @ W
+
+                    mean = np.mean(z, axis=0)
+                    std = np.std(z, axis=0)
+                    std[std == 0] = 1e-8
+                    z_norm = (z - mean) / std
+
                     min_col = int(x.shape[1] * 0.2)
                     max_col = int(x.shape[1] * 0.5)
                     col = np.random.choice(range(min_col, max_col), 1, replace=False)[0]
-                    masked_z = np.ascontiguousarray(z[:, : col + 1], dtype=np.float32)
+                    masked_z = np.ascontiguousarray(z_norm[:, : col + 1], dtype=np.float32)
                     kmeans = faiss.Kmeans(masked_z.shape[1], num_way, niter=20, nredo=1, verbose=False,
                                           min_points_per_centroid=self.shot + self.query, gpu=1)
                     kmeans.train(masked_z)
