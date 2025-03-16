@@ -24,7 +24,6 @@ def meta_trainer(P, train_func, test_func, model, optimizer, train_loader, test_
     """ training start """
     logger.log_dirname(f"Start training")
     for step in range(start_step, P.outer_steps + 1):
-        print(step)
 
         stime = time.time()
         train_batch = next(train_loader)
@@ -37,19 +36,20 @@ def meta_trainer(P, train_func, test_func, model, optimizer, train_loader, test_
         if step % P.eval_step == 0:
             acc = test_func(P, model, test_loader, criterion, step, logger=logger, **kwargs_test)
 
-            if best < acc:
-                best = acc
-                save_checkpoint(P, step, best, model.state_dict(),
-                                optimizer.state_dict(), logger.logdir, is_best=True)
+            # if best < acc:
+            #     best = acc
+            #     save_checkpoint(P, step, best, model.state_dict(),
+            #                     optimizer.state_dict(), logger.logdir, is_best=True)
 
-            logger.scalar_summary('eval/best_acc', best, step)
-            logger.log('[EVAL] [Step %3d] [Acc %5.2f] [Best %5.2f]' % (step, acc, best))
+            # logger.scalar_summary('eval/best_acc', best, step)
+            # logger.log('[EVAL] [Step %3d] [Acc %5.2f] [Best %5.2f]' % (step, acc, best))
+            print('[EVAL] [Step %3d] [Acc %5.2f] [Best %5.2f]' % (step, acc, best))
 
-        """ save model per save_step steps"""
-        if step % P.save_step == 0:
-            save_checkpoint_step(P, step, best, model.state_dict(),
-                                 optimizer.state_dict(), logger.logdir)
+        # """ save model per save_step steps"""
+        # if step % P.save_step == 0:
+        #     save_checkpoint_step(P, step, best, model.state_dict(),
+        #                          optimizer.state_dict(), logger.logdir)
 
-    """ save last model"""
-    save_checkpoint(P, P.outer_steps, best, model.state_dict(),
-                    optimizer.state_dict(), logger.logdir)
+    # """ save last model"""
+    # save_checkpoint(P, P.outer_steps, best, model.state_dict(),
+    #                 optimizer.state_dict(), logger.logdir)

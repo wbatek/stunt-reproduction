@@ -85,7 +85,7 @@ def test(P, model, optimizer, criterion, logger, test_set):
             if i % 100 == 0:
                 avg_accuracy = total_accuracy / total_tasks
                 print(f"Step {i}, Average accuracy: {avg_accuracy:.4f}")
-                logger.log(f"Step {i}, Avg Accuracies = {avg_accuracy:.4f}")
+                # logger.log(f"Step {i}, Avg Accuracies = {avg_accuracy:.4f}")
 
 
     avg_accuracy = total_accuracy / total_tasks
@@ -95,8 +95,8 @@ def test(P, model, optimizer, criterion, logger, test_set):
 
     # logger.scalar_summary('test/accuracy', avg_accuracy, 0)
     # logger.scalar_summary('test/loss', avg_loss, 0)
-    logger.log(avg_accuracy)
-    logger.log(avg_loss)
+    # logger.log(avg_accuracy)
+    # logger.log(avg_loss)
     return avg_accuracy
 
 
