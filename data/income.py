@@ -4,10 +4,13 @@ import torch
 import os
 import copy
 import faiss
+from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.mixture import GaussianMixture
 
 
 class Income(object):
+    kmeans = None
+    centroids = None
     def __init__(self, P, tabular_size, seed, source, shot, tasks_per_batch, test_num_way, query, eps):
         super().__init__()
         self.num_classes = 2
@@ -27,6 +30,14 @@ class Income(object):
         self.val_rng = np.random.RandomState(seed)
         self.invalid_count = 0
         self.eps = eps
+
+        if not Income.kmeans:
+            Income.kmeans = faiss.Kmeans(self.unlabeled_x.shape[1], 105, niter=20, nredo=1, verbose=False, gpu=1)
+            Income.kmeans.train(self.unlabeled_x)
+            Income.centroids = Income.kmeans.centroids
+            Income.kernel_matrix = cosine_similarity(Income.centroids)
+
+        self.kernel_matrix = Income.kernel_matrix
 
     def __next__(self):
         return self.get_batch()
@@ -91,25 +102,16 @@ class Income(object):
                 tmp_x = copy.deepcopy(x)
                 min_count = 0
                 while min_count < (self.shot + self.query):
-                    # U(min_col, max_col)
                     min_col = int(x.shape[1] * 0.2)
                     max_col = int(x.shape[1] * 0.5)
-                    # wybor kolumn
                     col = np.random.choice(range(min_col, max_col), 1, replace=False)[0]
                     task_idx = np.random.choice([i for i in range(x.shape[1])], col, replace=False)
-                    # masked_x - wyfiltrowany podzbior kolumn
                     masked_x = np.ascontiguousarray(x[:, task_idx], dtype=np.float32)
-                    # # k-means model
                     kmeans = faiss.Kmeans(masked_x.shape[1], num_way, niter=20, nredo=1, verbose=False,
                                           min_points_per_centroid=self.shot + self.query, gpu=1)
                     kmeans.train(masked_x)
-                    # szukamy dla kazdego elementu z masked_x najblizszy cluster
-                    # D - odleglosci do najblizszych klastrow
-                    # I - indeksy najblizszych klastrow dla kazdego punktu
                     D, I = kmeans.index.search(masked_x, 1)
-                    # y - indeksy klastrow -> integer label
                     y = I[:, 0].astype(np.int32)
-                    # class_list - indeksy klastrów, counts - ile punktow w kazdym klastrze
                     class_list, counts = np.unique(y, return_counts=True)
                     min_count = min(counts)
 
@@ -117,64 +119,14 @@ class Income(object):
                     if len(valid_classes) < num_way:
                         print("WARNING: Not enough valid clusters! Retrying...")
                         min_count = 0
-                    else:
-                        unique_classes = np.unique(self.val_y)
-                        sampled_indices = []
-                        for cls in unique_classes:
-                            class_indices = np.where(self.val_y == cls)[0]
-                            sampled_indices.extend(np.random.choice(class_indices, 2, replace=False))
 
-                        sampled_x = self.val_x[sampled_indices]
-                        sampled_y = self.val_y[sampled_indices]
-
-                        masked_sampled_z = np.ascontiguousarray(sampled_x[:, task_idx], dtype=np.float32)
-                        sampled_D, sampled_I = kmeans.index.search(masked_sampled_z, 1)
-                        clustered_y = sampled_I[:, 0].astype(np.int32)
-
-                        valid_clustering = True
-                        for cluster_label in np.unique(clustered_y):
-                            indices_in_cluster = np.where(clustered_y == cluster_label)[0]
-                            class_labels_in_cluster = sampled_y[indices_in_cluster]
-                            if len(np.unique(class_labels_in_cluster)) > 1:
-                                valid_clustering = False
-                                break
-
-                        if not valid_clustering:
-                            min_count = 0
-
-                    # masked_val_x = np.ascontiguousarray(self.val_x[:, task_idx], dtype=np.float32)
-                    # D_val, I_val = kmeans.index.search(masked_val_x, 1)
-                    #
-                    # from sklearn.metrics import adjusted_rand_score
-                    # ari = adjusted_rand_score(self.val_y, I_val[:, 0])
-                    # if ari < self.eps:
-                    #     self.invalid_count += 1
-                    #     print(f'Invalid count: {self.invalid_count}')
-                    #     min_count = 0
-
-                # num_to_permute = x.shape[0]
-                # for t_idx in task_idx:
-                #     # permutacja wierszy z wyselekcjonowanych wczesniej kolumn
-                #     rand_perm = np.random.permutation(num_to_permute)
-                #     # w kazdej kolumnie permutujemy wartosci
-                #     tmp_x[:, t_idx] = tmp_x[:, t_idx][rand_perm]
-                for t_idx in task_idx:
-                    tmp_x[:, t_idx] = 0
-                for i in range(tmp_x.shape[0]):
-                    tmp_x[i, :] = tmp_x[i, :] / (self.tabular_size - col)
-
-                # wybor n_way klas z listy klas
-                #print(class_list, num_way)
                 classes = class_list
 
-                # konstrukcja support i query setow
                 support_idx = []
                 query_idx = []
                 for k in classes:
-                    # indeksy danych z klasy k
                     k_idx = np.where(y == k)[0]
                     permutation = np.random.permutation(len(k_idx))
-                    # shuffle, zeby podzielic na query i support
                     k_idx = k_idx[permutation]
                     support_idx.append(k_idx[:self.shot])
                     query_idx.append(k_idx[self.shot:self.shot + self.query])
@@ -194,9 +146,24 @@ class Income(object):
                     query_y[q_y == k] = i
                     i += 1
 
-                support_set.append(support_x)
+                support_x[:, task_idx] = 0
+                query_x[:, task_idx] = 0
+
+                # n_columns_needed = self.kernel_matrix.shape[1]
+                #
+                # if support_x_filtered.shape[1] < n_columns_needed:
+                #     padding = np.zeros((support_x_filtered.shape[0], n_columns_needed - support_x_filtered.shape[1]))
+                #     support_x_filtered = np.hstack((support_x_filtered, padding))
+                #
+                # if query_x_filtered.shape[1] < n_columns_needed:
+                #     padding = np.zeros((query_x_filtered.shape[0], n_columns_needed - query_x_filtered.shape[1]))
+                #     query_x_filtered = np.hstack((query_x_filtered, padding))
+                support_x_transformed = np.matmul(support_x, self.kernel_matrix)
+                query_x_transformed = np.matmul(query_x, self.kernel_matrix)
+
+                support_set.append(support_x_transformed)
                 support_sety.append(support_y)
-                query_set.append(query_x)
+                query_set.append(query_x_transformed)
                 query_sety.append(query_y)
 
             xs_k = np.concatenate(support_set, 0)
@@ -214,20 +181,20 @@ class Income(object):
         if self.source == 'val':
             xs = np.reshape(
                 xs,
-                [self.tasks_per_batch, num_way * num_val_shot, self.tabular_size])
+                [self.tasks_per_batch, num_way * num_val_shot, self.kernel_matrix.shape[1]])
         else:
             xs = np.reshape(
                 xs,
-                [self.tasks_per_batch, num_way * self.shot, self.tabular_size])
+                [self.tasks_per_batch, num_way * self.shot, self.kernel_matrix.shape[1]])
 
         if self.source == 'val':
             xq = np.reshape(
                 xq,
-                [self.tasks_per_batch, num_way * 30, self.tabular_size])
+                [self.tasks_per_batch, num_way * 30, self.kernel_matrix.shape[1]])
         else:
             xq = np.reshape(
                 xq,
-                [self.tasks_per_batch, num_way * self.query, self.tabular_size])
+                [self.tasks_per_batch, num_way * self.query, self.kernel_matrix.shape[1]])
 
         xs = xs.astype(np.float32)
         xq = xq.astype(np.float32)
@@ -270,6 +237,9 @@ class Income(object):
             support_set_y = np.concatenate(support_set_y, axis=0)
             query_set_x = np.concatenate(query_set_x, axis=0)
             query_set_y = np.concatenate(query_set_y, axis=0)
+
+            support_set_x = np.matmul(support_set_x, self.kernel_matrix)
+            query_set_x = np.matmul(query_set_x, self.kernel_matrix)
 
             support_set_x = np.expand_dims(support_set_x, axis=0)  # Add task dimension
             support_set_y = np.expand_dims(support_set_y, axis=0)  # Add task dimension

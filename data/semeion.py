@@ -44,7 +44,7 @@ class Semeion(object):
             class_list, _ = np.unique(y, return_counts=True)
             num_val_shot = 1
 
-            num_way = 2
+            num_way = 10
 
         for _ in range(self.tasks_per_batch):
 
@@ -89,36 +89,22 @@ class Semeion(object):
                 tmp_x = copy.deepcopy(x)
                 min_count = 0
                 while min_count < (self.shot + self.query):
-                    # U(min_col, max_col)
                     min_col = int(x.shape[1] * 0.2)
                     max_col = int(x.shape[1] * 0.5)
-                    # wybor kolumn
                     col = np.random.choice(range(min_col, max_col), 1, replace=False)[0]
                     task_idx = np.random.choice([i for i in range(x.shape[1])], col, replace=False)
-                    # masked_x - wyfiltrowany podzbior kolumn
                     masked_x = np.ascontiguousarray(x[:, task_idx], dtype=np.float32)
-                    # # k-means model
                     kmeans = faiss.Kmeans(masked_x.shape[1], num_way, niter=20, nredo=1, verbose=False,
                                           min_points_per_centroid=self.shot + self.query, gpu=1)
                     kmeans.train(masked_x)
-                    # szukamy dla kazdego elementu z masked_x najblizszy cluster
-                    # D - odleglosci do najblizszych klastrow
-                    # I - indeksy najblizszych klastrow dla kazdego punktu
                     D, I = kmeans.index.search(masked_x, 1)
-                    # y - indeksy klastrow -> integer label
                     y = I[:, 0].astype(np.int32)
-                    # class_list - indeksy klastrów, counts - ile punktow w kazdym klastrze
                     class_list, counts = np.unique(y, return_counts=True)
                     min_count = min(counts)
 
-                    # masked_val_x = np.ascontiguousarray(self.val_x[:, task_idx], dtype=np.float32)
-                    # D_val, I_val = kmeans.index.search(masked_val_x, 1)
-                    #
-                    # from sklearn.metrics import adjusted_rand_score
-                    # ari = adjusted_rand_score(self.val_y, I_val[:, 0])
-                    # if ari < self.eps:
-                    #     self.invalid_count += 1
-                    #     print(f'Invalid count: {self.invalid_count}')
+                    # valid_classes = [cls for cls, count in zip(class_list, counts) if count >= (self.shot + self.query)]
+                    # if len(valid_classes) < num_way:
+                    #     print("WARNING: Not enough valid clusters! Retrying...")
                     #     min_count = 0
 
                 # num_to_permute - liczba wierszy w tabeli
@@ -175,7 +161,6 @@ class Semeion(object):
             xq.append(xq_k)
             ys.append(ys_k)
             yq.append(yq_k)
-
         xs, ys = np.stack(xs, 0), np.stack(ys, 0)
         xq, yq = np.stack(xq, 0), np.stack(yq, 0)
 
