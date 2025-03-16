@@ -136,13 +136,14 @@ def main(rank, P):
         train_func, fname, today = train_setup(P.mode, P)
         test_func = test_setup(P.mode, P)
 
-        """ define logger """
+        # """ define logger """
+        logger = ""
         logger = Logger(fname, ask=P.resume_path is None, today=today, rank=P.rank)
         logger.log(P)
         logger.log(model)
 
-        """ load model if necessary """
-        load_model(P, model, logger)
+        # """ load model if necessary """
+        # load_model(P, model, logger)
 
         """ train """
         meta_trainer(P, train_func, test_func, model, optimizer, train_loader, test_loader, logger)
