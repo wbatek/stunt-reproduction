@@ -72,6 +72,9 @@ def test(P, model, optimizer, criterion, logger, test_set, device):
                 support_inputs = support_inputs.to(device)
                 query_inputs = query_inputs.to(device)
 
+                support_targets = support_targets.to(device)
+                query_targets = query_targets.to(device)
+
                 support_embeddings = model(support_inputs)
                 query_embeddings = model(query_inputs)
 
