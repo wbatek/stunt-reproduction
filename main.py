@@ -51,7 +51,7 @@ def get_accuracy(prototypes, test_embeddings, test_targets):
     return accuracy
 
 
-def test(P, model, optimizer, criterion, logger, test_set):
+def test(P, model, optimizer, criterion, logger, test_set, device):
     accuracies = []
 
     total_accuracy = 0
@@ -68,6 +68,10 @@ def test(P, model, optimizer, criterion, logger, test_set):
             for task in batch:
                 support_inputs, support_targets = task['train']
                 query_inputs, query_targets = task['test']
+
+                support_inputs = support_inputs.to(device)
+                query_inputs = query_inputs.to(device)
+
                 support_embeddings = model(support_inputs)
                 query_embeddings = model(query_inputs)
 
@@ -151,7 +155,7 @@ def main(rank, P):
         """ test """
         criterion = nn.CrossEntropyLoss()
 
-        avg_acc = test(P, model, optimizer, criterion, logger, test_set)
+        avg_acc = test(P, model, optimizer, criterion, logger, test_set, device)
         #test_accuracies.append(avg_acc)
         """ close tensorboard """
         logger.close_writer()
