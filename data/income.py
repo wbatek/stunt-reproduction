@@ -89,10 +89,6 @@ class Income(object):
                 query_sety.append(query_y)
 
             elif self.source == 'train':
-                # 1) wylosowac macierz ortogonalna - QR lub gram-schmidt https://mathstoshare.com/2024/03/09/uniformly-sampling-orthogonal-matrices/
-                # dodatkowo przed k-meansem skalowanie danych
-                # 2) filtrowanie - 10 stałych sampli w każdej iteracji
-
                 min_count = 0
                 while min_count < (self.shot + self.query):
                     # W = np.random.uniform(-1, 1, (self.tabular_size, self.tabular_size))
