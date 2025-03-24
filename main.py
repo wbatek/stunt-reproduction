@@ -93,6 +93,9 @@ def test(P, model, optimizer, criterion, logger, test_set, device):
                 avg_accuracy = total_accuracy / total_tasks
                 print(f"Step {i}, Average accuracy: {avg_accuracy:.4f}")
                 # logger.log(f"Step {i}, Avg Accuracies = {avg_accuracy:.4f}")
+                total_accuracy = 0  # Zerowanie po logowaniu
+                total_tasks = 0
+                total_loss = 0
 
 
     avg_accuracy = total_accuracy / total_tasks

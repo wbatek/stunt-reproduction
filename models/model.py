@@ -1,7 +1,7 @@
 from models.protonet_model.mlp import MLPProto
 
 dataset_to_in = {
-    'income': 105,
+    'income': 150,
     'diabetes': 8,
     'optdigits': 64,
     'cmc': 24,
