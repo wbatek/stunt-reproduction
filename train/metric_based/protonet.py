@@ -52,20 +52,20 @@ def protonet_step(P, step, model, criterion, optimizer, batch, metric_logger, lo
 
 
     """ track stat """
-    metric_logger.meters['batch_time'].update(time.time() - stime)
-    metric_logger.meters['meta_test_cls'].update(loss.item())
-    metric_logger.meters['train_acc'].update(acc)
+    # metric_logger.meters['batch_time'].update(time.time() - stime)
+    # metric_logger.meters['meta_test_cls'].update(loss.item())
+    # metric_logger.meters['train_acc'].update(acc)
 
-    if step % P.print_step == 0:
-        logger.log_dirname(f"Step {step}")
-        logger.scalar_summary('train/meta_test_cls',
-                              metric_logger.meta_test_cls.global_avg, step)
-        logger.scalar_summary('train/train_acc',
-                              metric_logger.train_acc.global_avg, step)
-        logger.scalar_summary('train/batch_time',
-                              metric_logger.batch_time.global_avg, step)
-
-        logger.log('[TRAIN] [Step %3d] [Time %.3f] [Data %.3f] '
-                   '[MetaTestLoss %f]' %
-                   (step, metric_logger.batch_time.global_avg, metric_logger.data_time.global_avg,
-                    metric_logger.meta_test_cls.global_avg))
+    # if step % P.print_step == 0:
+    #     logger.log_dirname(f"Step {step}")
+    #     logger.scalar_summary('train/meta_test_cls',
+    #                           metric_logger.meta_test_cls.global_avg, step)
+    #     logger.scalar_summary('train/train_acc',
+    #                           metric_logger.train_acc.global_avg, step)
+    #     logger.scalar_summary('train/batch_time',
+    #                           metric_logger.batch_time.global_avg, step)
+    #
+    #     logger.log('[TRAIN] [Step %3d] [Time %.3f] [Data %.3f] '
+    #                '[MetaTestLoss %f]' %
+    #                (step, metric_logger.batch_time.global_avg, metric_logger.data_time.global_avg,
+    #                 metric_logger.meta_test_cls.global_avg))

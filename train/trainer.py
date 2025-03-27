@@ -13,7 +13,7 @@ def meta_trainer(P, train_func, test_func, model, optimizer, train_loader, test_
     kwargs = {}
     kwargs_test = {}
 
-    metric_logger = MetricLogger(delimiter="  ")
+    # metric_logger = MetricLogger(delimiter="  ")
 
     """ resume option """
     is_best, start_step, best, acc = is_resume(P, model, optimizer)
@@ -22,15 +22,15 @@ def meta_trainer(P, train_func, test_func, model, optimizer, train_loader, test_
     criterion = nn.CrossEntropyLoss()
 
     """ training start """
-    logger.log_dirname(f"Start training")
+    # logger.log_dirname(f"Start training")
     for step in range(start_step, P.outer_steps + 1):
 
         stime = time.time()
         train_batch = next(train_loader)
-        metric_logger.meters['data_time'].update(time.time() - stime)
+        # metric_logger.meters['data_time'].update(time.time() - stime)
 
         train_func(P, step, model, criterion, optimizer, train_batch,
-                   metric_logger=metric_logger, logger=logger, **kwargs)
+                   metric_logger="", logger=logger, **kwargs)
 
         """ evaluation & save the best model """
         if step % P.eval_step == 0:

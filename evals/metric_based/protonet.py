@@ -19,7 +19,7 @@ def test_classifier(P, model, loader, criterion, steps, logger=None):
     if logger is None:
         log_ = print
     else:
-        log_ = logger.log
+        log_ = print
 
     # Switch to evaluate mode
     mode = model.training
@@ -62,9 +62,9 @@ def test_classifier(P, model, loader, criterion, steps, logger=None):
     log_(' * [Acc@1 %.3f] [LossOut %.3f]' %
          (metric_logger.acc.global_avg, metric_logger.loss.global_avg))
 
-    if logger is not None:
-        logger.scalar_summary('eval/acc', metric_logger.acc.global_avg, steps)
-        logger.scalar_summary('eval/loss_test', metric_logger.loss.global_avg, steps)
+    # if logger is not None:
+    #     logger.scalar_summary('eval/acc', metric_logger.acc.global_avg, steps)
+    #     logger.scalar_summary('eval/loss_test', metric_logger.loss.global_avg, steps)
 
     model.train(mode)
 

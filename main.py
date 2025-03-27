@@ -147,9 +147,9 @@ def main(rank, P):
 
         # """ define logger """
         logger = ""
-        logger = Logger(fname, ask=P.resume_path is None, today=today, rank=P.rank)
-        logger.log(P)
-        logger.log(model)
+        # logger = Logger(fname, ask=P.resume_path is None, today=today, rank=P.rank)
+        # logger.log(P)
+        # logger.log(model)
 
         # """ load model if necessary """
         # load_model(P, model, logger)
