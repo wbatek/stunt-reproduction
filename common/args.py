@@ -63,6 +63,9 @@ def parse_args(default=False):
     parser.add_argument('--model', help='model type',
                         type=str, default='mlp')
 
+    """ MINE """
+    parser.add_argument('--kernel_size', help='kernel size', type=int, default=100)
+
     if default:
         return parser.parse_args('')  # empty string
     else:

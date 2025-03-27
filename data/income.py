@@ -20,22 +20,29 @@ class Income(object):
         self.shot = shot
         self.query = query
         self.tasks_per_batch = tasks_per_batch
-        self.unlabeled_x = np.load('./data/income/train_x.npy')
-        self.test_x = np.load('./data/income/xtest.npy')
-        self.test_y = np.load('./data/income/ytest.npy')
-        self.val_x = np.load('./data/income/val_x.npy')
-        self.val_y = np.load(
-            './data/income/pseudo_val_y.npy')
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        self.unlabeled_x = torch.tensor(np.load('./data/income/train_x.npy'), dtype=torch.float32).to(self.device)
+        self.test_x = torch.tensor(np.load('./data/income/xtest.npy'), dtype=torch.float32).to(self.device)
+        self.test_y = torch.tensor(np.load('./data/income/ytest.npy'), dtype=torch.long).to(self.device)
+        self.val_x = torch.tensor(np.load('./data/income/val_x.npy'), dtype=torch.float32).to(self.device)
+        self.val_y = torch.tensor(np.load('./data/income/pseudo_val_y.npy'), dtype=torch.long).to(self.device)
+        # self.unlabeled_x = np.load('./data/income/train_x.npy')
+        # self.test_x = np.load('./data/income/xtest.npy')
+        # self.test_y = np.load('./data/income/ytest.npy')
+        # self.val_x = np.load('./data/income/val_x.npy')
+        # self.val_y = np.load(
+        #     './data/income/pseudo_val_y.npy')
         self.test_num_way = test_num_way
-        self.test_rng = np.random.RandomState(seed)
-        self.val_rng = np.random.RandomState(seed)
+        self.test_rng = torch.Generator(device=self.device).manual_seed(seed)
+        self.val_rng = torch.Generator(device=self.device).manual_seed(seed)
         self.invalid_count = 0
         self.eps = eps
 
         if not Income.kmeans:
-            Income.kmeans = faiss.Kmeans(self.unlabeled_x.shape[1], 150, niter=20, nredo=1, verbose=False, gpu=1)
-            Income.kmeans.train(self.unlabeled_x)
-            Income.centroids = Income.kmeans.centroids
+            Income.kmeans = faiss.Kmeans(self.unlabeled_x.shape[1], P.kernel_size, niter=20, gpu=True)
+            Income.kmeans.train(self.unlabeled_x.cpu().numpy())
+            Income.centroids = torch.tensor(Income.kmeans.centroids, device=self.device)
 
         self.centroids = Income.centroids
 
@@ -47,17 +54,21 @@ class Income(object):
 
     def get_batch(self):
         xs, ys, xq, yq = [], [], [], []
-        if self.source == 'train':
-            x = self.unlabeled_x
-            num_way = self.test_num_way
-
-        elif self.source == 'val':
-            x = self.val_x
-            y = self.val_y
-            class_list, _ = np.unique(y, return_counts=True)
-            num_val_shot = 1
-
-            num_way = 2
+        x = self.unlabeled_x if self.source == 'train' else self.val_x
+        y = self.val_y if self.source == 'val' else None
+        num_way = 2 if self.source == 'val' else self.test_num_way
+        num_val_shot = 1 if self.source == 'val' else None
+        # if self.source == 'train':
+        #     x = self.unlabeled_x
+        #     num_way = self.test_num_way
+        #
+        # elif self.source == 'val':
+        #     x = self.val_x
+        #     y = self.val_y
+        #     class_list, _ = np.unique(y, return_counts=True)
+        #     num_val_shot = 1
+        #
+        #     num_way = 2
 
         for _ in range(self.tasks_per_batch):
 
@@ -67,18 +78,17 @@ class Income(object):
             query_sety = []
 
             if self.source == 'val':
-
-                classes = np.random.choice(class_list, num_way, replace=False)
+                class_list = torch.unique(y)
+                classes = class_list[torch.randperm(len(class_list))[:num_way]]
                 support_idx = []
                 query_idx = []
+
                 for k in classes:
-                    k_idx = np.where(y == k)[0]
-                    permutation = np.random.permutation(len(k_idx))
-                    k_idx = k_idx[permutation]
+                    k_idx = (y == k).nonzero(as_tuple=True)[0]
+                    k_idx = k_idx[torch.randperm(len(k_idx))]
                     support_idx.append(k_idx[:num_val_shot])
                     query_idx.append(k_idx[num_val_shot:num_val_shot + 30])
-                support_idx = np.concatenate(support_idx)
-                query_idx = np.concatenate(query_idx)
+                support_idx, query_idx = torch.cat(support_idx), torch.cat(query_idx)
 
                 support_x = x[support_idx]
                 query_x = x[query_idx]
@@ -93,27 +103,9 @@ class Income(object):
                     query_y[q_y == k] = i
                     i += 1
 
-                similarities = []
-                for i, element in enumerate(support_x):
-                    dot_products = np.dot(self.centroids, element)
-                    norm_centroids = np.linalg.norm(self.centroids, axis=1)
-                    norm_element = np.linalg.norm(element)
-                    similarity = np.divide(dot_products, norm_element * norm_centroids,
-                                           out=np.zeros_like(dot_products), where=(norm_element * norm_centroids) != 0)
-                    similarities.append(similarity)
-
-                similarities_query = []
-                for i, element in enumerate(query_x):
-                    dot_products = np.dot(self.centroids, element)
-                    norm_centroids = np.linalg.norm(self.centroids, axis=1)
-                    norm_element = np.linalg.norm(element)
-                    similarity = np.divide(dot_products, norm_element * norm_centroids,
-                                           out=np.zeros_like(dot_products), where=(norm_element * norm_centroids) != 0)
-                    similarities_query.append(similarity)
-
-                support_set.append(similarities)
+                support_set.append(self.compute_similarity(support_x))
+                query_set.append(self.compute_similarity(query_x))
                 support_sety.append(support_y)
-                query_set.append(similarities_query)
                 query_sety.append(query_y)
 
             elif self.source == 'train':
@@ -122,41 +114,40 @@ class Income(object):
                 while min_count < (self.shot + self.query):
                     min_col = int(x.shape[1] * 0.2)
                     max_col = int(x.shape[1] * 0.5)
-                    col = np.random.choice(range(min_col, max_col), 1, replace=False)[0]
-                    task_idx = np.random.choice([i for i in range(x.shape[1])], col, replace=False)
-                    masked_x = np.ascontiguousarray(x[:, task_idx], dtype=np.float32)
+                    col = torch.randint(min_col, max_col, (1,)).item()
+                    task_idx = torch.randperm(x.shape[1], device=self.device)[:col]
+                    masked_x = x[:, task_idx].contiguous()
                     kmeans = faiss.Kmeans(masked_x.shape[1], num_way, niter=20, nredo=1, verbose=False,
                                           min_points_per_centroid=self.shot + self.query, gpu=1)
                     kmeans.train(masked_x)
                     D, I = kmeans.index.search(masked_x, 1)
-                    y = I[:, 0].astype(np.int32)
-                    class_list, counts = np.unique(y, return_counts=True)
-                    min_count = min(counts)
+                    y = torch.tensor(I[:, 0], device=self.device, dtype=torch.int32)
+                    class_list, counts = torch.unique(y, return_counts=True)
+                    min_count = counts.min().item()
 
-                    valid_classes = [cls for cls, count in zip(class_list, counts) if count >= (self.shot + self.query)]
-                    if len(valid_classes) < num_way:
+                    valid_classes = class_list[(counts >= (self.shot + self.query))]
+                    if valid_classes.numel() < num_way:
                         print("WARNING: Not enough valid clusters! Retrying...")
                         min_count = 0
 
-                classes = class_list
+                classes = valid_classes.tolist()
 
                 support_idx = []
                 query_idx = []
                 for k in classes:
-                    k_idx = np.where(y == k)[0]
-                    permutation = np.random.permutation(len(k_idx))
-                    k_idx = k_idx[permutation]
+                    k_idx = (y == k).nonzero(as_tuple=True)[0]
+                    perm = torch.randperm(k_idx.size(0), device=self.device)
+                    k_idx = k_idx[perm]
                     support_idx.append(k_idx[:self.shot])
                     query_idx.append(k_idx[self.shot:self.shot + self.query])
-                support_idx = np.concatenate(support_idx)
-                query_idx = np.concatenate(query_idx)
+                support_idx = torch.cat(support_idx)
+                query_idx = torch.cat(query_idx)
 
                 support_x = tmp_x[support_idx]
                 query_x = tmp_x[query_idx]
                 s_y = y[support_idx]
                 q_y = y[query_idx]
-                support_y = copy.deepcopy(s_y)
-                query_y = copy.deepcopy(q_y)
+                support_y, query_y = s_y.clone(), q_y.clone()
 
                 i = 0
                 for k in classes:
@@ -164,75 +155,62 @@ class Income(object):
                     query_y[q_y == k] = i
                     i += 1
 
-                remaining_idx = np.setdiff1d(np.arange(self.tabular_size), task_idx)
+                remaining_idx = torch.tensor(list(set(range(self.tabular_size)) - set(task_idx.tolist())), device=self.device)
 
-                similarities = []
-                for i, element in enumerate(support_x):
-                    element_filtered = element[remaining_idx]
+                def compute_similarities(data_x):
+                    similarities = []
                     centroids_filtered = self.centroids[:, remaining_idx]
-                    dot_products = np.dot(centroids_filtered, element_filtered)
-                    norm_centroids = np.linalg.norm(centroids_filtered, axis=1)
-                    norm_element = np.linalg.norm(element_filtered)
-                    similarity = np.divide(dot_products, norm_element * norm_centroids,
-                                           out=np.zeros_like(dot_products), where=(norm_element * norm_centroids) != 0)
-                    similarities.append(similarity)
+                    for element in data_x:
+                        element_filtered = element[remaining_idx]
+                        dot_products = torch.matmul(centroids_filtered, element_filtered)
+                        norm_centroids = torch.norm(centroids_filtered, dim=1)
+                        norm_element = torch.norm(element_filtered)
+                        similarity = torch.div(dot_products, norm_element * norm_centroids)
+                        similarity = torch.where((norm_element * norm_centroids) != 0, similarity,
+                                                 torch.zeros_like(dot_products))
+                        similarities.append(similarity)
+                    return similarities
 
-                similarities_query = []
-                for i, element in enumerate(query_x):
-                    element_filtered = element[remaining_idx]
-                    centroids_filtered = self.centroids[:, remaining_idx]
-                    dot_products = np.dot(centroids_filtered, element_filtered)
-                    norm_centroids = np.linalg.norm(centroids_filtered, axis=1)
-                    norm_element = np.linalg.norm(element_filtered)
-                    similarity = np.divide(dot_products, norm_element * norm_centroids,
-                                           out=np.zeros_like(dot_products), where=(norm_element * norm_centroids) != 0)
-                    similarities_query.append(similarity)
-
-                support_set.append(similarities)
+                support_set.append(compute_similarities(support_x))
                 support_sety.append(support_y)
-                query_set.append(similarities_query)
+                query_set.append(compute_similarities(query_x))
                 query_sety.append(query_y)
 
-            xs_k = np.concatenate(support_set, 0)
-            xq_k = np.concatenate(query_set, 0)
-            ys_k = np.concatenate(support_sety, 0)
-            yq_k = np.concatenate(query_sety, 0)
+            xs_k = torch.cat([item for sublist in support_set for item in sublist], dim=0)
+            xq_k = torch.cat([item for sublist in query_set for item in sublist], dim=0)
+            ys_k = torch.cat(
+                [item.unsqueeze(0) if item.dim() == 0 else item for sublist in support_sety for item in sublist], dim=0)
+            yq_k = torch.cat(
+                [item.unsqueeze(0) if item.dim() == 0 else item for sublist in query_sety for item in sublist], dim=0)
 
             xs.append(xs_k)
             xq.append(xq_k)
             ys.append(ys_k)
             yq.append(yq_k)
-        xs, ys = np.stack(xs, 0), np.stack(ys, 0)
-        xq, yq = np.stack(xq, 0), np.stack(yq, 0)
+        xs, ys = torch.stack(xs, 0), torch.stack(ys, 0)
+        xq, yq = torch.stack(xq, 0), torch.stack(yq, 0)
 
         if self.source == 'val':
-            xs = np.reshape(
+            xs = torch.reshape(
                 xs,
                 [self.tasks_per_batch, num_way * num_val_shot, self.centroids.shape[0]])
         else:
-            xs = np.reshape(
+            xs = torch.reshape(
                 xs,
                 [self.tasks_per_batch, num_way * self.shot, self.centroids.shape[0]])
-
         if self.source == 'val':
-            xq = np.reshape(
+            xq = torch.reshape(
                 xq,
                 [self.tasks_per_batch, num_way * 30, self.centroids.shape[0]])
         else:
-            xq = np.reshape(
+            xq = torch.reshape(
                 xq,
                 [self.tasks_per_batch, num_way * self.query, self.centroids.shape[0]])
 
-        xs = xs.astype(np.float32)
-        xq = xq.astype(np.float32)
-        ys = ys.astype(np.float32)
-        yq = yq.astype(np.float32)
-
-        xs = torch.from_numpy(xs).type(torch.FloatTensor)
-        xq = torch.from_numpy(xq).type(torch.FloatTensor)
-
-        ys = torch.from_numpy(ys).type(torch.LongTensor)
-        yq = torch.from_numpy(yq).type(torch.LongTensor)
+        xs = torch.tensor(xs, dtype=torch.float32, device=self.device)
+        xq = torch.tensor(xq, dtype=torch.float32, device=self.device)
+        ys = torch.tensor(ys, dtype=torch.float32, device=self.device)
+        yq = torch.tensor(yq, dtype=torch.float32, device=self.device)
 
         batch = {'train': [xs, ys], 'test': [xq, yq]}
 
@@ -240,14 +218,15 @@ class Income(object):
 
     def get_test_batch(self):
         def transform(x):
-            dot_products = np.dot(self.centroids, x)
-            norm_centroids = np.linalg.norm(self.centroids, axis=1)
-            norm_element = np.linalg.norm(x)
-            similarity = np.divide(dot_products, norm_element * norm_centroids,
-                                   out=np.zeros_like(dot_products), where=(norm_element * norm_centroids) != 0)
+            dot_products = torch.matmul(self.centroids, x)
+            norm_centroids = torch.norm(self.centroids, dim=1)
+            norm_element = torch.norm(x)
+            similarity = torch.div(dot_products, norm_element * norm_centroids)
+            similarity = torch.where((norm_element * norm_centroids) != 0, similarity,
+                                     torch.zeros_like(dot_products))
             return similarity
 
-        num_classes = len(np.unique(self.test_y))
+        num_classes = len(torch.unique(self.test_y))
         tasks = []
         for _ in range(self.tasks_per_batch):
             support_set_x = []
@@ -255,50 +234,42 @@ class Income(object):
             query_set_x = []
             query_set_y = []
 
-            selected_classes = np.random.choice(range(num_classes), self.test_num_way, replace=False)
+            selected_classes = torch.randperm(num_classes, device=self.device)[:self.test_num_way]
             for class_id in selected_classes:
-                class_indices = np.where(self.test_y == class_id)[0]
-                np.random.shuffle(class_indices)
+                class_indices = (self.test_y == class_id).nonzero(as_tuple=True)[0]
+                shuffled_indices = class_indices[torch.randperm(class_indices.size(0), device=self.device)]
 
-                support_indices = class_indices[:self.shot]
-                query_indices = class_indices[self.shot:self.shot + self.query]
+                support_indices = shuffled_indices[:self.shot]
+                query_indices = shuffled_indices[self.shot:self.shot + self.query]
 
                 current = self.test_x[support_indices]
-                v = np.stack([transform(c) for c in current])
+                v = torch.stack([transform(c) for c in current])
                 support_set_x.append(v)
 
                 # support_set_x.append(self.test_x[support_indices])
-                support_set_y.append(np.full(len(support_indices), class_id))
+                support_set_y.append(torch.full((len(support_indices),), class_id, dtype=torch.long, device=self.device))
 
                 current_query = self.test_x[query_indices]
-                v = np.stack([transform(c) for c in current_query])
+                v = torch.stack([transform(c) for c in current_query])
                 query_set_x.append(v)
 
                 #query_set_x.append(self.test_x[query_indices])
-                query_set_y.append(np.full(len(query_indices), class_id))  # Class labels for query set
+                query_set_y.append(torch.full((len(query_indices),), class_id, dtype=torch.long, device=self.device))
 
-            # Convert lists to proper arrays
-            support_set_x = np.vstack(support_set_x)  # Shape: (num_shots * num_ways, 150)
-            support_set_y = np.concatenate(support_set_y)  # Shape: (num_shots * num_ways,)
+            support_set_x = torch.cat(support_set_x).unsqueeze(0)  # Add batch dimension
+            support_set_y = torch.cat(support_set_y).unsqueeze(0)
 
-            query_set_x = np.vstack(query_set_x)  # Shape: (num_queries * num_ways, 150)
-            query_set_y = np.concatenate(query_set_y)  # Shape: (num_queries * num_ways,)
+            query_set_x = torch.cat(query_set_x).unsqueeze(0)
+            query_set_y = torch.cat(query_set_y).unsqueeze(0)
 
-            # Add batch dimension
-            support_set_x = np.expand_dims(support_set_x, axis=0)  # Shape: (1, num_shots * num_ways, 150)
-            query_set_x = np.expand_dims(query_set_x, axis=0)  # Shape: (1, num_queries * num_ways, 150)
-
-            support_set_y = np.expand_dims(support_set_y, axis=0)  # Shape: (1, num_shots * num_ways)
-            query_set_y = np.expand_dims(query_set_y, axis=0)  # Shape: (1, num_queries * num_ways)
-
-            # Convert to PyTorch tensors
             tasks.append({
-                'train': [torch.tensor(support_set_x, dtype=torch.float32),
-                          torch.tensor(support_set_y, dtype=torch.long)],
-                'test': [torch.tensor(query_set_x, dtype=torch.float32),
-                         torch.tensor(query_set_y, dtype=torch.long)]
+                'train': [support_set_x.to(self.device), support_set_y.to(self.device)],
+                'test': [query_set_x.to(self.device), query_set_y.to(self.device)]
             })
         return tasks
 
-    def get_invalid_count(self):
-        return self.invalid_count
+    def compute_similarity(self, elements):
+        dot_products = torch.mm(self.centroids, elements.T).T
+        norm_centroids = torch.norm(self.centroids, dim=1, keepdim=True)
+        norm_elements = torch.norm(elements, dim=1, keepdim=True)
+        return dot_products / (norm_elements * norm_centroids.T).clamp(min=1e-8)

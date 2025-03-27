@@ -62,7 +62,6 @@ def test(P, model, optimizer, criterion, logger, test_set, device):
 
     with torch.no_grad():
         for i in range(1000):
-            print(i)
             batch = test_set.get_test_batch()
 
             for task in batch:

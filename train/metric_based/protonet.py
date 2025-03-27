@@ -36,10 +36,11 @@ def protonet_step(P, step, model, criterion, optimizer, batch, metric_logger, lo
     test_targets = test_targets.to(device)
     test_embeddings = model(test_inputs)
 
-    prototypes = get_prototypes(train_embeddings, train_targets, num_ways)
+    prototypes = get_prototypes(train_embeddings, train_targets.to(torch.int64), num_ways)
     
     squared_distances = torch.sum((prototypes.unsqueeze(2)
                                 - test_embeddings.unsqueeze(1)) ** 2, dim=-1)
+    test_targets = test_targets.to(torch.int64)
     loss = criterion(-squared_distances, test_targets)
 
     """ outer gradient step """
