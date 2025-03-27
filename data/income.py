@@ -119,8 +119,8 @@ class Income(object):
                     masked_x = x[:, task_idx].contiguous()
                     kmeans = faiss.Kmeans(masked_x.shape[1], num_way, niter=20, nredo=1, verbose=False,
                                           min_points_per_centroid=self.shot + self.query, gpu=1)
-                    kmeans.train(masked_x)
-                    D, I = kmeans.index.search(masked_x, 1)
+                    kmeans.train(masked_x.cpu().numpy())
+                    D, I = kmeans.index.search(masked_x.cpu().numpy(), 1)
                     y = torch.tensor(I[:, 0], device=self.device, dtype=torch.int32)
                     class_list, counts = torch.unique(y, return_counts=True)
                     min_count = counts.min().item()
