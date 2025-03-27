@@ -40,9 +40,11 @@ class Income(object):
         self.eps = eps
 
         if not Income.kmeans:
+            print('before kmeans in constructor')
             Income.kmeans = faiss.Kmeans(self.unlabeled_x.shape[1], P.kernel_size, niter=20, gpu=True)
             Income.kmeans.train(self.unlabeled_x.cpu().numpy())
             Income.centroids = torch.tensor(Income.kmeans.centroids, device=self.device)
+            print('after kmeans in constructor')
 
         self.centroids = Income.centroids
 
@@ -112,6 +114,7 @@ class Income(object):
                 tmp_x = copy.deepcopy(x)
                 min_count = 0
                 while min_count < (self.shot + self.query):
+                    print('before kmeans in get_batch')
                     min_col = int(x.shape[1] * 0.2)
                     max_col = int(x.shape[1] * 0.5)
                     col = torch.randint(min_col, max_col, (1,)).item()
@@ -124,6 +127,7 @@ class Income(object):
                     y = torch.tensor(I[:, 0], device=self.device, dtype=torch.int32)
                     class_list, counts = torch.unique(y, return_counts=True)
                     min_count = counts.min().item()
+                    print('after kmeans in get_batch')
 
                     valid_classes = class_list[(counts >= (self.shot + self.query))]
                     if valid_classes.numel() < num_way:
