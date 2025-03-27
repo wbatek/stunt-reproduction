@@ -41,7 +41,7 @@ class Income(object):
 
         if not Income.kmeans:
             print('before kmeans in constructor')
-            Income.kmeans = faiss.Kmeans(self.unlabeled_x.shape[1], P.kernel_size, niter=20, gpu=True)
+            Income.kmeans = faiss.Kmeans(self.unlabeled_x.shape[1], P.kernel_size, niter=20, gpu=0)
             Income.kmeans.train(self.unlabeled_x.cpu().numpy())
             Income.centroids = torch.tensor(Income.kmeans.centroids, device=self.device)
             print('after kmeans in constructor')
@@ -121,7 +121,7 @@ class Income(object):
                     task_idx = torch.randperm(x.shape[1], device=self.device)[:col]
                     masked_x = x[:, task_idx].contiguous()
                     kmeans = faiss.Kmeans(masked_x.shape[1], num_way, niter=20, nredo=1, verbose=False,
-                                          min_points_per_centroid=self.shot + self.query, gpu=1)
+                                          min_points_per_centroid=self.shot + self.query, gpu=0)
                     kmeans.train(masked_x.cpu().numpy())
                     D, I = kmeans.index.search(masked_x.cpu().numpy(), 1)
                     y = torch.tensor(I[:, 0], device=self.device, dtype=torch.int32)
