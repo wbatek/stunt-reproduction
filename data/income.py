@@ -20,7 +20,8 @@ class Income(object):
         self.shot = shot
         self.query = query
         self.tasks_per_batch = tasks_per_batch
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        #self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cpu")
 
         self.unlabeled_x = torch.tensor(np.load('./data/income/train_x.npy'), dtype=torch.float32).to(self.device)
         self.test_x = torch.tensor(np.load('./data/income/xtest.npy'), dtype=torch.float32).to(self.device)
