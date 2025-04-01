@@ -9,18 +9,10 @@ from torchmeta.utils.prototype import get_prototypes
 from common.args import parse_args
 from common.utils import get_optimizer, load_model
 from data.dataset import get_meta_dataset
-from data.diabetes import Diabetes
 from data.income import Income
 from models.model import get_model
 from train.trainer import meta_trainer
 from utils import Logger, set_random_seed
-
-import pandas as pd
-import numpy as np
-from sklearn.utils import shuffle
-import torch.nn.functional as F
-
-import wandb
 
 
 def get_accuracy(prototypes, test_embeddings, test_targets):
@@ -116,48 +108,37 @@ def main(rank, P):
     """ define dataset and dataloader """
     # kwargs = {'batch_size': P.batch_size, 'shuffle': True,
     #           'pin_memory': True, 'num_workers': 2}
-    eps_values = [0]
-    invalid_counts = []
-    test_accuracies = []
-    for eps in eps_values:
-        #wandb.init(project="stunt_epsilon_checking", name=f"experiment_eps_{eps}_{P.dataset}", reinit=True)
-        train_set, val_set, test_set = get_meta_dataset(P, dataset=P.dataset, eps=eps)
+    train_set, val_set, test_set = get_meta_dataset(P, dataset=P.dataset)
 
-        train_loader = train_set
-        test_loader = val_set
+    train_loader = train_set
+    test_loader = val_set
 
-        """ Initialize model, optimizer, loss_scalar (for amp) and scheduler """
-        model = get_model(P, P.model).to(device)
-        optimizer = get_optimizer(P, model)
+    """ Initialize model, optimizer, loss_scalar (for amp) and scheduler """
+    model = get_model(P, P.model).to(device)
+    optimizer = get_optimizer(P, model)
 
-        """ define train and test type """
-        from train import setup as train_setup
-        from evals import setup as test_setup
-        train_func, fname, today = train_setup(P.mode, P)
-        test_func = test_setup(P.mode, P)
+    """ define train and test type """
+    from train import setup as train_setup
+    from evals import setup as test_setup
+    train_func, fname, today = train_setup(P.mode, P)
+    test_func = test_setup(P.mode, P)
 
-        """ define logger """
-        logger = Logger(fname, ask=P.resume_path is None, today=today, rank=P.rank)
-        logger.log(P)
-        logger.log(model)
+    """ define logger """
+    logger = Logger(fname, ask=P.resume_path is None, today=today, rank=P.rank)
+    logger.log(P)
+    logger.log(model)
 
-        """ load model if necessary """
-        load_model(P, model, logger)
+    """ load model if necessary """
+    load_model(P, model, logger)
 
-        """ train """
-        meta_trainer(P, train_func, test_func, model, optimizer, train_loader, test_loader, logger)
-        #invalid_counts.append(train_loader.get_invalid_count())
-        """ test """
-        criterion = nn.CrossEntropyLoss()
+    """ train """
+    meta_trainer(P, train_func, test_func, model, optimizer, train_loader, test_loader, logger)
+    """ test """
+    criterion = nn.CrossEntropyLoss()
 
-        avg_acc = test(P, model, optimizer, criterion, logger, test_set)
-        #test_accuracies.append(avg_acc)
-        """ close tensorboard """
-        logger.close_writer()
-
-       # wandb.log({"eps": eps, "invalid_count": train_loader.get_invalid_count(), "test_accuracy": avg_acc})
-
-    #wandb.log({"eps_values": eps_values, "invalid_counts": invalid_counts, "test_accuracies": test_accuracies})
+    avg_acc = test(P, model, optimizer, criterion, logger, test_set)
+    """ close tensorboard """
+    logger.close_writer()
 
 
 if __name__ == "__main__":
