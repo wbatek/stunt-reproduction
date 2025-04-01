@@ -1,16 +1,10 @@
+import importlib
+
 import torch
 from torchvision import transforms
 
-from data.cmc import Cmc
 from data.dataset_impl import Dataset
-from data.dna import Dna
 
-from data.income import Income
-from data.diabetes import Diabetes
-from data.karhunen import Karhunen
-from data.optdigits import Optdigits
-from data.pixel import Pixel
-from data.semeion import Semeion
 
 dataset_to_num_classes = {
     'income': 2,
@@ -34,7 +28,16 @@ dataset_to_tabular_size = {
     'pixel': 240
 }
 
-def get_meta_dataset(P, dataset, eps, only_test=False):
+def get_meta_dataset(P, dataset):
+    try:
+        module_path = f"data.{dataset}.retrieve_files"  # Example: 'diabetes.retrieve_files'
+        retrieve_module = importlib.import_module(module_path)
+        retrieve_function = getattr(retrieve_module, "retrieve")
+        retrieve_function(P.seed)
+    except (ModuleNotFoundError, AttributeError) as e:
+        raise ImportError(f"Could not import retrieve function for dataset '{dataset}': {e}")
+
+
     meta_train_dataset = Dataset(P,
                                      name=dataset,
                                      tabular_size=dataset_to_tabular_size[dataset],
@@ -54,7 +57,7 @@ def get_meta_dataset(P, dataset, eps, only_test=False):
                                    shot=1,
                                    tasks_per_batch=P.test_batch_size,
                                    test_num_way=2,
-                                   query=30,
+                                   query=15,
                                    num_classes=dataset_to_num_classes[dataset])
 
     meta_test_dataset = Dataset(P,

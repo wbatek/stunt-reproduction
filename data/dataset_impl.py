@@ -53,7 +53,6 @@ class Dataset(object):
             query_sety = []
 
             if self.source == 'val':
-
                 classes = np.random.choice(class_list, num_way, replace=False)
                 support_idx = []
                 query_idx = []
@@ -62,7 +61,7 @@ class Dataset(object):
                     permutation = np.random.permutation(len(k_idx))
                     k_idx = k_idx[permutation]
                     support_idx.append(k_idx[:num_val_shot])
-                    query_idx.append(k_idx[num_val_shot:num_val_shot + 30])
+                    query_idx.append(k_idx[num_val_shot:num_val_shot + 15])
                 support_idx = np.concatenate(support_idx)
                 query_idx = np.concatenate(query_idx)
 
@@ -107,15 +106,8 @@ class Dataset(object):
 
                 num_to_permute = x.shape[0]
                 for t_idx in task_idx:
-                    # permutacja wierszy z wyselekcjonowanych wczesniej kolumn
                     rand_perm = np.random.permutation(num_to_permute)
-                    # w kazdej kolumnie permutujemy wartosci
                     tmp_x[:, t_idx] = tmp_x[:, t_idx][rand_perm]
-                # for t_idx in task_idx:
-                #     tmp_x[:, t_idx] = 0
-                # for i in range(tmp_x.shape[0]):
-                #     tmp_x[i, :] = tmp_x[i, :] / (self.tabular_size - col)
-
                 classes = class_list
 
                 support_idx = []
@@ -171,7 +163,7 @@ class Dataset(object):
         if self.source == 'val':
             xq = np.reshape(
                 xq,
-                [self.tasks_per_batch, num_way * 30, self.tabular_size])
+                [self.tasks_per_batch, num_way * 15, self.tabular_size])
         else:
             xq = np.reshape(
                 xq,
@@ -201,7 +193,7 @@ class Dataset(object):
             query_set_x = []
             query_set_y = []
 
-            selected_classes = np.random.choice(range(num_classes), self.test_num_way, replace=False)
+            selected_classes = range(num_classes)
             for class_id in selected_classes:
                 class_indices = np.where(self.test_y == class_id)[0]
                 np.random.shuffle(class_indices)
