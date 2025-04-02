@@ -28,7 +28,7 @@ def get_model(P, modelstr):
             #     model = MLPProto(180, 1024, 1024)
             # elif P.dataset == 'karhunen':
             #     model = MLPProto(64, 1024, 1024)
-            model = MLPProto(dataset_to_in[P.dataset], 1024, 1024)
+            model = MLPProto(P.kernel_size, 1024, 1024)
     else:
         raise NotImplementedError()
 
