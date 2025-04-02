@@ -7,6 +7,8 @@ import faiss
 
 
 class Dataset(object):
+    kmeans = None
+    centroids = None
     def __init__(self, P, name, tabular_size, seed, source, shot, tasks_per_batch, test_num_way, query, num_classes):
         super().__init__()
         self.num_classes = num_classes
@@ -24,6 +26,13 @@ class Dataset(object):
         self.test_num_way = test_num_way
         self.test_rng = np.random.RandomState(seed)
         self.val_rng = np.random.RandomState(seed)
+
+        if not Dataset.kmeans:
+            Dataset.kmeans = faiss.Kmeans(self.unlabeled_x.shape[1], P.kernel_size, niter=20, nredo=1, verbose=False, gpu=1)
+            Dataset.kmeans.train(self.unlabeled_x)
+            Dataset.centroids = Dataset.kmeans.centroids
+
+        self.centroids = Dataset.centroids
 
     def __next__(self):
         return self.get_batch()
@@ -78,9 +87,27 @@ class Dataset(object):
                     query_y[q_y == k] = i
                     i += 1
 
-                support_set.append(support_x)
+                similarities = []
+                for i, element in enumerate(support_x):
+                    dot_products = np.dot(self.centroids, element)
+                    norm_centroids = np.linalg.norm(self.centroids, axis=1)
+                    norm_element = np.linalg.norm(element)
+                    similarity = np.divide(dot_products, norm_element * norm_centroids,
+                                           out=np.zeros_like(dot_products), where=(norm_element * norm_centroids) != 0)
+                    similarities.append(similarity)
+
+                similarities_query = []
+                for i, element in enumerate(query_x):
+                    dot_products = np.dot(self.centroids, element)
+                    norm_centroids = np.linalg.norm(self.centroids, axis=1)
+                    norm_element = np.linalg.norm(element)
+                    similarity = np.divide(dot_products, norm_element * norm_centroids,
+                                           out=np.zeros_like(dot_products), where=(norm_element * norm_centroids) != 0)
+                    similarities_query.append(similarity)
+
+                support_set.append(similarities)
                 support_sety.append(support_y)
-                query_set.append(query_x)
+                query_set.append(similarities_query)
                 query_sety.append(query_y)
 
             elif self.source == 'train':
@@ -104,10 +131,6 @@ class Dataset(object):
                     if len(valid_classes) < num_way:
                         min_count = 0
 
-                num_to_permute = x.shape[0]
-                for t_idx in task_idx:
-                    rand_perm = np.random.permutation(num_to_permute)
-                    tmp_x[:, t_idx] = tmp_x[:, t_idx][rand_perm]
                 classes = class_list
 
                 support_idx = []
@@ -134,9 +157,32 @@ class Dataset(object):
                     query_y[q_y == k] = i
                     i += 1
 
-                support_set.append(support_x)
+                remaining_idx = np.setdiff1d(np.arange(self.tabular_size), task_idx)
+                similarities = []
+                for i, element in enumerate(support_x):
+                    element_filtered = element[remaining_idx]
+                    centroids_filtered = self.centroids[:, remaining_idx]
+                    dot_products = np.dot(centroids_filtered, element_filtered)
+                    norm_centroids = np.linalg.norm(centroids_filtered, axis=1)
+                    norm_element = np.linalg.norm(element_filtered)
+                    similarity = np.divide(dot_products, norm_element * norm_centroids,
+                                           out=np.zeros_like(dot_products), where=(norm_element * norm_centroids) != 0)
+                    similarities.append(similarity)
+
+                similarities_query = []
+                for i, element in enumerate(query_x):
+                    element_filtered = element[remaining_idx]
+                    centroids_filtered = self.centroids[:, remaining_idx]
+                    dot_products = np.dot(centroids_filtered, element_filtered)
+                    norm_centroids = np.linalg.norm(centroids_filtered, axis=1)
+                    norm_element = np.linalg.norm(element_filtered)
+                    similarity = np.divide(dot_products, norm_element * norm_centroids,
+                                           out=np.zeros_like(dot_products), where=(norm_element * norm_centroids) != 0)
+                    similarities_query.append(similarity)
+
+                support_set.append(similarities)
                 support_sety.append(support_y)
-                query_set.append(query_x)
+                query_set.append(similarities_query)
                 query_sety.append(query_y)
 
             xs_k = np.concatenate(support_set, 0)
@@ -154,20 +200,20 @@ class Dataset(object):
         if self.source == 'val':
             xs = np.reshape(
                 xs,
-                [self.tasks_per_batch, num_way * num_val_shot, self.tabular_size])
+                [self.tasks_per_batch, num_way * num_val_shot, self.centroids.shape[0]])
         else:
             xs = np.reshape(
                 xs,
-                [self.tasks_per_batch, num_way * self.shot, self.tabular_size])
+                [self.tasks_per_batch, num_way * self.shot, self.centroids.shape[0]])
 
         if self.source == 'val':
             xq = np.reshape(
                 xq,
-                [self.tasks_per_batch, num_way * 15, self.tabular_size])
+                [self.tasks_per_batch, num_way * 15, self.centroids.shape[0]])
         else:
             xq = np.reshape(
                 xq,
-                [self.tasks_per_batch, num_way * self.query, self.tabular_size])
+                [self.tasks_per_batch, num_way * self.query, self.centroids.shape[0]])
 
         xs = xs.astype(np.float32)
         xq = xq.astype(np.float32)
@@ -185,6 +231,14 @@ class Dataset(object):
         return batch
 
     def get_test_batch(self):
+        def transform(x):
+            dot_products = np.dot(self.centroids, x)
+            norm_centroids = np.linalg.norm(self.centroids, axis=1)
+            norm_element = np.linalg.norm(x)
+            similarity = np.divide(dot_products, norm_element * norm_centroids,
+                                   out=np.zeros_like(dot_products), where=(norm_element * norm_centroids) != 0)
+            return similarity
+
         num_classes = len(np.unique(self.test_y))
         tasks = []
         for _ in range(self.tasks_per_batch):
@@ -201,15 +255,30 @@ class Dataset(object):
                 support_indices = class_indices[:self.shot]
                 query_indices = class_indices[self.shot:self.shot + self.query]
 
-                support_set_x.append(self.test_x[support_indices])
-                support_set_y.append(np.full(len(support_indices), class_id))  # Class labels for support set
-                query_set_x.append(self.test_x[query_indices])
-                query_set_y.append(np.full(len(query_indices), class_id))  # Class labels for query set
+                current = self.test_x[support_indices]
+                v = np.stack([transform(c) for c in current])
+                support_set_x.append(v)
 
-            support_set_x = np.concatenate(support_set_x, axis=0)
-            support_set_y = np.concatenate(support_set_y, axis=0)
-            query_set_x = np.concatenate(query_set_x, axis=0)
-            query_set_y = np.concatenate(query_set_y, axis=0)
+                support_set_y.append(np.full(len(support_indices), class_id))
+
+                current_query = self.test_x[query_indices]
+                v = np.stack([transform(c) for c in current_query])
+                query_set_x.append(v)
+
+                query_set_y.append(np.full(len(query_indices), class_id))
+
+                # support_indices = class_indices[:self.shot]
+                # query_indices = class_indices[self.shot:self.shot + self.query]
+                #
+                # support_set_x.append(self.test_x[support_indices])
+                # support_set_y.append(np.full(len(support_indices), class_id))  # Class labels for support set
+                # query_set_x.append(self.test_x[query_indices])
+                # query_set_y.append(np.full(len(query_indices), class_id))  # Class labels for query set
+
+            support_set_x = np.vstack(support_set_x)  # Shape: (num_shots * num_ways, 150)
+            support_set_y = np.concatenate(support_set_y)  # Shape: (num_shots * num_ways,)
+            query_set_x = np.vstack(query_set_x)  # Shape: (num_queries * num_ways, 150)
+            query_set_y = np.concatenate(query_set_y)
 
             support_set_x = np.expand_dims(support_set_x, axis=0)  # Add task dimension
             support_set_y = np.expand_dims(support_set_y, axis=0)  # Add task dimension
@@ -222,3 +291,5 @@ class Dataset(object):
                 'test': [torch.tensor(query_set_x, dtype=torch.float32), torch.tensor(query_set_y, dtype=torch.long)]
             })
         return tasks
+
+
