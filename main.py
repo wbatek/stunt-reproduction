@@ -9,7 +9,6 @@ from torchmeta.utils.prototype import get_prototypes
 from common.args import parse_args
 from common.utils import get_optimizer, load_model
 from data.dataset import get_meta_dataset
-from data.income import Income
 from models.model import get_model
 from train.trainer import meta_trainer
 from utils import Logger, set_random_seed
