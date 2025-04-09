@@ -16,20 +16,15 @@ def retrieve(seed):
 
     data = pd.read_csv(os.path.join(project_dir, "magic04.data"), header=None)
 
-    for col in data.select_dtypes([np.object_]):
-        data[col] = data[col].str.decode('utf-8')
-
     # Separate features and target variable
     y = data.iloc[:, -1]  # Labels are in the last column
     X = data.iloc[:, :-1]  # Features start from the first column
-
     # Encode class labels
     label_encoder = LabelEncoder()
     y = label_encoder.fit_transform(y)
 
     preprocessor = ColumnTransformer([
-        ('onehot', OneHotEncoder(handle_unknown='ignore', drop='first'), [0, 1, 2, 3, 4]),
-        ('scaler', MinMaxScaler(), [5, 6])
+        ('scaler', MinMaxScaler(), list(range(X.shape[1])))
     ])
 
     X = preprocessor.fit_transform(X)
@@ -42,6 +37,8 @@ def retrieve(seed):
         X_train = X_train.toarray()
         X_val = X_val.toarray()
         X_test = X_test.toarray()
+
+    print(f"X_train shape: {X_train.shape}")
 
     # Save datasets as NumPy arrays in the specified directory
     np.save(os.path.join(project_dir, "train_x.npy"), X_train)
