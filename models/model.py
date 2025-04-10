@@ -9,6 +9,9 @@ dataset_to_in = {
     'karhunen': 64,
     'semeion': 256,
     'pixel': 240,
+    'magic_telescope': 10,
+    'marketing': 42,
+    'electricity': 13,
 }
 
 
