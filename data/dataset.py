@@ -15,7 +15,9 @@ dataset_to_num_classes = {
     'karhunen': 10,
     'semeion': 10,
     'pixel': 10,
-    'magic_telescope': 2
+    'magic_telescope': 2,
+    'marketing': 2,
+    'electricity': 2,
 }
 
 dataset_to_tabular_size = {
@@ -27,7 +29,9 @@ dataset_to_tabular_size = {
     'karhunen': 64,
     'semeion': 256,
     'pixel': 240,
-    'magic_telescope': 10
+    'magic_telescope': 10,
+    'marketing': 42,
+    'electricity': 13,
 }
 
 def get_meta_dataset(P, dataset):
