@@ -18,6 +18,8 @@ dataset_to_num_classes = {
     'magic_telescope': 2,
     'marketing': 2,
     'electricity': 2,
+    'nomao': 2,
+    'bioresponse': 2,
 }
 
 dataset_to_tabular_size = {
@@ -32,6 +34,8 @@ dataset_to_tabular_size = {
     'magic_telescope': 10,
     'marketing': 42,
     'electricity': 13,
+    'nomao': 174,
+    'bioresponse': 1776,
 }
 
 def get_meta_dataset(P, dataset):
