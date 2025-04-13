@@ -12,6 +12,7 @@ dataset_to_in = {
     'magic_telescope': 10,
     'marketing': 42,
     'electricity': 13,
+    'nomao': 174,
 }
 
 
