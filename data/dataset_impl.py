@@ -26,6 +26,8 @@ class Dataset(object):
         self.test_num_way = test_num_way
         self.test_rng = np.random.RandomState(seed)
         self.val_rng = np.random.RandomState(seed)
+        self.kernel_type = 'cosine'
+        self.gamma = 0.01
 
         if not Dataset.kmeans:
             Dataset.kmeans = faiss.Kmeans(self.unlabeled_x.shape[1], P.kernel_size, niter=20, nredo=1, verbose=False, gpu=1)
@@ -88,22 +90,36 @@ class Dataset(object):
                     i += 1
 
                 similarities = []
-                for i, element in enumerate(support_x):
-                    dot_products = np.dot(self.centroids, element)
-                    norm_centroids = np.linalg.norm(self.centroids, axis=1)
-                    norm_element = np.linalg.norm(element)
-                    similarity = np.divide(dot_products, norm_element * norm_centroids,
-                                           out=np.zeros_like(dot_products), where=(norm_element * norm_centroids) != 0)
-                    similarities.append(similarity)
-
                 similarities_query = []
-                for i, element in enumerate(query_x):
-                    dot_products = np.dot(self.centroids, element)
-                    norm_centroids = np.linalg.norm(self.centroids, axis=1)
-                    norm_element = np.linalg.norm(element)
-                    similarity = np.divide(dot_products, norm_element * norm_centroids,
-                                           out=np.zeros_like(dot_products), where=(norm_element * norm_centroids) != 0)
-                    similarities_query.append(similarity)
+                if self.kernel_type == 'cosine':
+                    for i, element in enumerate(support_x):
+                        dot_products = np.dot(self.centroids, element)
+                        norm_centroids = np.linalg.norm(self.centroids, axis=1)
+                        norm_element = np.linalg.norm(element)
+                        similarity = np.divide(dot_products, norm_element * norm_centroids,
+                                               out=np.zeros_like(dot_products), where=(norm_element * norm_centroids) != 0)
+                        similarities.append(similarity)
+                    for i, element in enumerate(query_x):
+                        dot_products = np.dot(self.centroids, element)
+                        norm_centroids = np.linalg.norm(self.centroids, axis=1)
+                        norm_element = np.linalg.norm(element)
+                        similarity = np.divide(dot_products, norm_element * norm_centroids,
+                                               out=np.zeros_like(dot_products), where=(norm_element * norm_centroids) != 0)
+                        similarities_query.append(similarity)
+                elif self.kernel_type == 'rbf':
+                    for i, element in enumerate(support_x):
+                        # Compute squared Euclidean distance to each centroid
+                        diff = self.centroids - element  # shape: (num_centroids, feature_dim)
+                        sq_distances = np.sum(diff ** 2, axis=1)  # shape: (num_centroids,)
+                        similarity = np.exp(-self.gamma * sq_distances)
+                        similarities.append(similarity)
+
+                    for i, element in enumerate(query_x):
+                        # Compute squared Euclidean distance to each centroid
+                        diff = self.centroids - element  # shape: (num_centroids, feature_dim)
+                        sq_distances = np.sum(diff ** 2, axis=1)  # shape: (num_centroids,)
+                        similarity = np.exp(-self.gamma * sq_distances)
+                        similarities_query.append(similarity)
 
                 support_set.append(similarities)
                 support_sety.append(support_y)
@@ -159,26 +175,44 @@ class Dataset(object):
 
                 remaining_idx = np.setdiff1d(np.arange(self.tabular_size), task_idx)
                 similarities = []
-                for i, element in enumerate(support_x):
-                    element_filtered = element[remaining_idx]
-                    centroids_filtered = self.centroids[:, remaining_idx]
-                    dot_products = np.dot(centroids_filtered, element_filtered)
-                    norm_centroids = np.linalg.norm(centroids_filtered, axis=1)
-                    norm_element = np.linalg.norm(element_filtered)
-                    similarity = np.divide(dot_products, norm_element * norm_centroids,
-                                           out=np.zeros_like(dot_products), where=(norm_element * norm_centroids) != 0)
-                    similarities.append(similarity)
-
                 similarities_query = []
-                for i, element in enumerate(query_x):
-                    element_filtered = element[remaining_idx]
-                    centroids_filtered = self.centroids[:, remaining_idx]
-                    dot_products = np.dot(centroids_filtered, element_filtered)
-                    norm_centroids = np.linalg.norm(centroids_filtered, axis=1)
-                    norm_element = np.linalg.norm(element_filtered)
-                    similarity = np.divide(dot_products, norm_element * norm_centroids,
-                                           out=np.zeros_like(dot_products), where=(norm_element * norm_centroids) != 0)
-                    similarities_query.append(similarity)
+                if self.kernel_type == 'cosine':
+                    for i, element in enumerate(support_x):
+                        element_filtered = element[remaining_idx]
+                        centroids_filtered = self.centroids[:, remaining_idx]
+                        dot_products = np.dot(centroids_filtered, element_filtered)
+                        norm_centroids = np.linalg.norm(centroids_filtered, axis=1)
+                        norm_element = np.linalg.norm(element_filtered)
+                        similarity = np.divide(dot_products, norm_element * norm_centroids,
+                                               out=np.zeros_like(dot_products), where=(norm_element * norm_centroids) != 0)
+                        similarities.append(similarity)
+
+                    for i, element in enumerate(query_x):
+                        element_filtered = element[remaining_idx]
+                        centroids_filtered = self.centroids[:, remaining_idx]
+                        dot_products = np.dot(centroids_filtered, element_filtered)
+                        norm_centroids = np.linalg.norm(centroids_filtered, axis=1)
+                        norm_element = np.linalg.norm(element_filtered)
+                        similarity = np.divide(dot_products, norm_element * norm_centroids,
+                                               out=np.zeros_like(dot_products), where=(norm_element * norm_centroids) != 0)
+                        similarities_query.append(similarity)
+                elif self.kernel_type == 'rbf':
+                    for i, element in enumerate(support_x):
+                        element_filtered = element[remaining_idx]
+                        centroids_filtered = self.centroids[:, remaining_idx]
+                        diff = centroids_filtered - element_filtered  # shape: (num_centroids, feature_dim)
+                        sq_distances = np.sum(diff ** 2, axis=1)  # shape: (num_centroids,)
+                        similarity = np.exp(-self.gamma * sq_distances)
+                        similarities.append(similarity)
+
+                    for i, element in enumerate(query_x):
+                        element_filtered = element[remaining_idx]
+                        centroids_filtered = self.centroids[:, remaining_idx]
+                        diff = centroids_filtered - element_filtered  # shape: (num_centroids, feature_dim)
+                        sq_distances = np.sum(diff ** 2, axis=1)  # shape: (num_centroids,)
+                        similarity = np.exp(-self.gamma * sq_distances)
+                        similarities_query.append(similarity)
+
 
                 support_set.append(similarities)
                 support_sety.append(support_y)
@@ -232,11 +266,17 @@ class Dataset(object):
 
     def get_test_batch(self):
         def transform(x):
-            dot_products = np.dot(self.centroids, x)
-            norm_centroids = np.linalg.norm(self.centroids, axis=1)
-            norm_element = np.linalg.norm(x)
-            similarity = np.divide(dot_products, norm_element * norm_centroids,
-                                   out=np.zeros_like(dot_products), where=(norm_element * norm_centroids) != 0)
+            # dot_products = np.dot(self.centroids, x)
+            # norm_centroids = np.linalg.norm(self.centroids, axis=1)
+            # norm_element = np.linalg.norm(x)
+            # similarity = np.divide(dot_products, norm_element * norm_centroids,
+            #                        out=np.zeros_like(dot_products), where=(norm_element * norm_centroids) != 0)
+            # return similarity
+
+            # Compute squared Euclidean distance to each centroid
+            diff = self.centroids - x
+            sq_distances = np.sum(diff ** 2, axis=1)  # shape: (num_centroids,)
+            similarity = np.exp(-self.gamma * sq_distances)
             return similarity
 
         num_classes = len(np.unique(self.test_y))
