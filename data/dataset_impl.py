@@ -30,8 +30,9 @@ class Dataset(object):
         self.gamma = 0.1
 
         if not Dataset.kmeans:
-            Dataset.kmeans = faiss.Kmeans(self.unlabeled_x.shape[1], P.kernel_size, niter=20, nredo=1, verbose=False, gpu=1)
-            Dataset.kmeans.train(self.unlabeled_x)
+            x = self.unlabeled_x.astype(np.float32).copy()
+            Dataset.kmeans = faiss.Kmeans(x.shape[1], P.kernel_size, niter=20, nredo=1, verbose=False, gpu=1)
+            Dataset.kmeans.train(x)
             Dataset.centroids = Dataset.kmeans.centroids
 
         self.centroids = Dataset.centroids
