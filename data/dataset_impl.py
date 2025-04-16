@@ -26,8 +26,8 @@ class Dataset(object):
         self.test_num_way = test_num_way
         self.test_rng = np.random.RandomState(seed)
         self.val_rng = np.random.RandomState(seed)
-        self.kernel_type = 'cosine'
-        self.gamma = 0.01
+        self.kernel_type = 'rbf'
+        self.gamma = 0.1
 
         if not Dataset.kmeans:
             Dataset.kmeans = faiss.Kmeans(self.unlabeled_x.shape[1], P.kernel_size, niter=20, nredo=1, verbose=False, gpu=1)
