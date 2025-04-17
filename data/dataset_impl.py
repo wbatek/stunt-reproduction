@@ -267,18 +267,19 @@ class Dataset(object):
 
     def get_test_batch(self):
         def transform(x):
-            # dot_products = np.dot(self.centroids, x)
-            # norm_centroids = np.linalg.norm(self.centroids, axis=1)
-            # norm_element = np.linalg.norm(x)
-            # similarity = np.divide(dot_products, norm_element * norm_centroids,
-            #                        out=np.zeros_like(dot_products), where=(norm_element * norm_centroids) != 0)
-            # return similarity
-
-            # Compute squared Euclidean distance to each centroid
-            diff = self.centroids - x
-            sq_distances = np.sum(diff ** 2, axis=1)  # shape: (num_centroids,)
-            similarity = np.exp(-self.gamma * sq_distances)
-            return similarity
+            if self.kernel_type == 'cosine':
+                dot_products = np.dot(self.centroids, x)
+                norm_centroids = np.linalg.norm(self.centroids, axis=1)
+                norm_element = np.linalg.norm(x)
+                similarity = np.divide(dot_products, norm_element * norm_centroids,
+                                       out=np.zeros_like(dot_products), where=(norm_element * norm_centroids) != 0)
+                return similarity
+            elif self.kernel_type == 'rbf':
+                # Compute squared Euclidean distance to each centroid
+                diff = self.centroids - x
+                sq_distances = np.sum(diff ** 2, axis=1)  # shape: (num_centroids,)
+                similarity = np.exp(-self.gamma * sq_distances)
+                return similarity
 
         num_classes = len(np.unique(self.test_y))
         tasks = []
