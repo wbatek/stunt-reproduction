@@ -26,7 +26,7 @@ class Dataset(object):
         self.test_num_way = test_num_way
         self.test_rng = np.random.RandomState(seed)
         self.val_rng = np.random.RandomState(seed)
-        self.kernel_type = 'rbf'
+        self.kernel_type = 'cosine'
         self.gamma = 0.1
 
         if not Dataset.kmeans:
