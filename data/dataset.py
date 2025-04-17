@@ -19,6 +19,7 @@ dataset_to_num_classes = {
     'marketing': 2,
     'electricity': 2,
     'nomao': 2,
+    'gas-drift': 6,
 }
 
 dataset_to_tabular_size = {
@@ -34,6 +35,7 @@ dataset_to_tabular_size = {
     'marketing': 42,
     'electricity': 13,
     'nomao': 174,
+    'gas-drift': 128,
 }
 
 def get_meta_dataset(P, dataset):

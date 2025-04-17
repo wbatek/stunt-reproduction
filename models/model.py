@@ -13,6 +13,7 @@ dataset_to_in = {
     'marketing': 42,
     'electricity': 13,
     'nomao': 174,
+    'gas-drift': 128,
 }
 
 
