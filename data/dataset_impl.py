@@ -26,10 +26,10 @@ class Dataset(object):
         self.test_num_way = test_num_way
         self.test_rng = np.random.RandomState(seed)
         self.val_rng = np.random.RandomState(seed)
-        self.kernel_type = 'rbf'
+        self.kernel_type = P.kernel_type
         self.gamma = 0.1
         self.kernel_size = P.kernel_size
-        self.local = False
+        self.local = P.local
 
         if not Dataset.kmeans:
             x = self.unlabeled_x.astype(np.float32).copy()

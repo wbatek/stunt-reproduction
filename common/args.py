@@ -66,6 +66,9 @@ def parse_args(default=False):
     """mine"""
     parser.add_argument('--kernel_size', help='kernel size',
                         type=int, default=150)
+    parser.add_argument('--local', help='Run with local kernel', action='store_true')
+    parser.add_argument('--kernel_type', help='kernel type',
+                        type=str, default='cosine')
 
     if default:
         return parser.parse_args('')  # empty string
