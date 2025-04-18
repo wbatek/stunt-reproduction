@@ -26,8 +26,10 @@ class Dataset(object):
         self.test_num_way = test_num_way
         self.test_rng = np.random.RandomState(seed)
         self.val_rng = np.random.RandomState(seed)
-        self.kernel_type = 'cosine'
+        self.kernel_type = 'rbf'
         self.gamma = 0.1
+        self.kernel_size = P.kernel_size
+        self.local = False
 
         if not Dataset.kmeans:
             x = self.unlabeled_x.astype(np.float32).copy()
@@ -150,6 +152,24 @@ class Dataset(object):
 
                 classes = class_list
 
+                if self.local:
+                    kernel_centroids = []
+                    per_class = self.kernel_size // num_way
+                    extra = self.kernel_size % num_way
+
+                    for i, k in enumerate(classes):
+                        k_idx = np.where(y == k)[0]
+                        needed = per_class + (1 if i < extra else 0)
+
+                        if len(k_idx) < needed:
+                            raise ValueError(f"Not enough samples in cluster {k} to extract {needed} kernel points.")
+
+                        selected_idx = np.random.choice(k_idx, needed, replace=False)
+                        kernel_centroids.append(tmp_x[selected_idx])
+
+                    # Flatten to (P.kernel_size, feature_dim)
+                    kernel_centroids_flat = np.concatenate(kernel_centroids, axis=0)
+
                 support_idx = []
                 query_idx = []
                 for k in classes:
@@ -180,7 +200,10 @@ class Dataset(object):
                 if self.kernel_type == 'cosine':
                     for i, element in enumerate(support_x):
                         element_filtered = element[remaining_idx]
-                        centroids_filtered = self.centroids[:, remaining_idx]
+                        if self.local:
+                            centroids_filtered = kernel_centroids_flat[:, remaining_idx]
+                        else:
+                            centroids_filtered = self.centroids[:, remaining_idx]
                         dot_products = np.dot(centroids_filtered, element_filtered)
                         norm_centroids = np.linalg.norm(centroids_filtered, axis=1)
                         norm_element = np.linalg.norm(element_filtered)
@@ -190,7 +213,10 @@ class Dataset(object):
 
                     for i, element in enumerate(query_x):
                         element_filtered = element[remaining_idx]
-                        centroids_filtered = self.centroids[:, remaining_idx]
+                        if self.local:
+                            centroids_filtered = kernel_centroids_flat[:, remaining_idx]
+                        else:
+                            centroids_filtered = self.centroids[:, remaining_idx]
                         dot_products = np.dot(centroids_filtered, element_filtered)
                         norm_centroids = np.linalg.norm(centroids_filtered, axis=1)
                         norm_element = np.linalg.norm(element_filtered)
