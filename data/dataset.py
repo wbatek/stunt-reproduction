@@ -39,13 +39,14 @@ dataset_to_tabular_size = {
 }
 
 def get_meta_dataset(P, dataset):
-    try:
-        module_path = f"data.{dataset}.retrieve_files"  # Example: 'diabetes.retrieve_files'
-        retrieve_module = importlib.import_module(module_path)
-        retrieve_function = getattr(retrieve_module, "retrieve")
-        retrieve_function(P.seed)
-    except (ModuleNotFoundError, AttributeError) as e:
-        raise ImportError(f"Could not import retrieve function for dataset '{dataset}': {e}")
+    if dataset != 'income':
+        try:
+            module_path = f"data.{dataset}.retrieve_files"  # Example: 'diabetes.retrieve_files'
+            retrieve_module = importlib.import_module(module_path)
+            retrieve_function = getattr(retrieve_module, "retrieve")
+            retrieve_function(P.seed)
+        except (ModuleNotFoundError, AttributeError) as e:
+            raise ImportError(f"Could not import retrieve function for dataset '{dataset}': {e}")
 
 
     meta_train_dataset = Dataset(P,

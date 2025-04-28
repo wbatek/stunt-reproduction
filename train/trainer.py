@@ -1,4 +1,6 @@
 import time
+from collections import OrderedDict
+from tabpfn import TabPFNClassifier
 
 import torch
 import torch.nn as nn
@@ -9,47 +11,49 @@ from utils import MetricLogger, save_checkpoint, save_checkpoint_step
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def meta_trainer(P, train_func, test_func, model, optimizer, train_loader, test_loader, logger):
-    kwargs = {}
-    kwargs_test = {}
-
+def meta_trainer(P, train_func, test_func, model, train_loader, test_loader, logger):
     metric_logger = MetricLogger(delimiter="  ")
 
     """ resume option """
-    is_best, start_step, best, acc = is_resume(P, model, optimizer)
+    is_best, start_step, best, acc = False, 1, 100.0, 0.0
 
     """ define loss function """
     criterion = nn.CrossEntropyLoss()
 
     """ training start """
     logger.log_dirname(f"Start training")
-    for step in range(start_step, P.outer_steps + 1):
-        print(step)
+    total_accuracy = 0
+    total_tasks = 0
 
-        stime = time.time()
-        train_batch = next(train_loader)
-        metric_logger.meters['data_time'].update(time.time() - stime)
+    for step in range(P.outer_steps):
+        try:
+            print(step)
+            train_batch = next(train_loader)
+            support_inputs, support_targets = train_batch['train']
+            query_inputs, query_targets = train_batch['test']
 
-        train_func(P, step, model, criterion, optimizer, train_batch,
-                   metric_logger=metric_logger, logger=logger, **kwargs)
+            batch_size = support_inputs.shape[0]
+            num_ways = P.num_ways
+            num_shots = P.num_shots
+            feature_dim = support_inputs.shape[-1]
 
-        """ evaluation & save the best model """
-        if step % P.eval_step == 0:
-            acc = test_func(P, model, test_loader, criterion, step, logger=logger, **kwargs_test)
+            support_inputs = support_inputs.reshape(batch_size * num_shots * num_ways, feature_dim)
+            support_targets = support_targets.reshape(batch_size * num_shots * num_ways)
+            query_inputs = query_inputs.reshape(batch_size * num_ways * P.num_shots_test, feature_dim)
+            query_targets = query_targets.reshape(batch_size * num_ways * P.num_shots_test)
 
-            if best < acc:
-                best = acc
-                save_checkpoint(P, step, best, model.state_dict(),
-                                optimizer.state_dict(), logger.logdir, is_best=True)
+            model.fit(support_inputs, support_targets)
+            y_eval, p_eval = model.predict(query_inputs, return_winning_probability=True)
 
-            logger.scalar_summary('eval/best_acc', best, step)
-            logger.log('[EVAL] [Step %3d] [Acc %5.2f] [Best %5.2f]' % (step, acc, best))
+            correct = sum(1 for i in range(len(y_eval)) if y_eval[i] == query_targets[i])
+            acc = correct / len(y_eval)
 
-        """ save model per save_step steps"""
-        if step % P.save_step == 0:
-            save_checkpoint_step(P, step, best, model.state_dict(),
-                                 optimizer.state_dict(), logger.logdir)
+            total_accuracy += acc
+            total_tasks += 1
 
-    """ save last model"""
-    save_checkpoint(P, P.outer_steps, best, model.state_dict(),
-                    optimizer.state_dict(), logger.logdir)
+            if step % 100 == 0:
+                avg_accuracy = total_accuracy / total_tasks
+                print("Avg accuracies =", avg_accuracy)
+                logger.log("STEP" + str(step) + ", Avg Accuracies = " + str(avg_accuracy))
+        except Exception as e:
+            print('no niezle', e)

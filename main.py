@@ -1,15 +1,12 @@
 import sys
 
 import torch
-from torch import nn
+from tabpfn import TabPFNClassifier
 
 # from torchmeta.utils.data import BatchMetaDataLoader
-from torchmeta.utils.prototype import get_prototypes
-
 from common.args import parse_args
 from common.utils import get_optimizer, load_model
 from data.dataset import get_meta_dataset
-from data.income import Income
 from models.model import get_model
 from train.trainer import meta_trainer
 from utils import Logger, set_random_seed
@@ -43,14 +40,13 @@ def get_accuracy(prototypes, test_embeddings, test_targets):
     return accuracy
 
 
-def test(P, model, optimizer, criterion, logger, test_set):
+def test(P, model, criterion, logger, test_set):
     accuracies = []
 
     total_accuracy = 0
     total_loss = 0
     total_tasks = 0
 
-    model.eval()
 
     with torch.no_grad():
         for i in range(P.outer_steps):
@@ -60,19 +56,18 @@ def test(P, model, optimizer, criterion, logger, test_set):
             for task in batch:
                 support_inputs, support_targets = task['train']
                 query_inputs, query_targets = task['test']
-                support_embeddings = model(support_inputs)
-                query_embeddings = model(query_inputs)
+                support_inputs = support_inputs.squeeze(0)  # Shape: (num_way * shot, tabular_size)
+                query_inputs = query_inputs.squeeze(0)  # Shape: (num_way * query, tabular_size)
+                support_targets = support_targets.squeeze(0)  # Shape: (num_way * shot,)
+                query_targets = query_targets.squeeze(0)  # Shape: (num_way * query,)
 
-                prototypes = get_prototypes(support_embeddings, support_targets, test_set.num_classes)
+                model.fit(support_inputs.numpy(), support_targets.numpy())
 
-                squared_distances = torch.sum((prototypes.unsqueeze(2) - query_embeddings.unsqueeze(1)) ** 2, dim=-1)
+                y_eval = model.predict(query_inputs.numpy())
 
-                loss = criterion(-squared_distances, query_targets)
-
-                acc = get_accuracy(prototypes, query_embeddings, query_targets).item()
-                accuracies.append(acc)
+                correct = sum(1 for i in range(len(y_eval)) if y_eval[i] == query_targets.numpy()[i])
+                acc = correct / len(y_eval)
                 total_accuracy += acc
-                total_loss += loss.item()
                 total_tasks += 1
             if i % 100 == 0:
                 avg_accuracy = total_accuracy / total_tasks
@@ -87,8 +82,8 @@ def test(P, model, optimizer, criterion, logger, test_set):
 
     # logger.scalar_summary('test/accuracy', avg_accuracy, 0)
     # logger.scalar_summary('test/loss', avg_loss, 0)
-    logger.log(avg_accuracy)
-    logger.log(avg_loss)
+    # logger.log(avg_accuracy)
+    # logger.log(avg_loss)
     return avg_accuracy
 
 
@@ -114,8 +109,8 @@ def main(rank, P):
     test_loader = val_set
 
     """ Initialize model, optimizer, loss_scalar (for amp) and scheduler """
-    model = get_model(P, P.model).to(device)
-    optimizer = get_optimizer(P, model)
+    model = TabPFNClassifier(device='cpu', N_ensemble_configurations=32)
+    # optimizer = get_optimizer(P, model)
 
     """ define train and test type """
     from train import setup as train_setup
@@ -132,17 +127,25 @@ def main(rank, P):
     load_model(P, model, logger)
 
     """ train """
-    meta_trainer(P, train_func, test_func, model, optimizer, train_loader, test_loader, logger)
+    #meta_trainer(P, train_func, test_func, model, train_loader, test_loader, logger)
     """ test """
     criterion = nn.CrossEntropyLoss()
 
-    avg_acc = test(P, model, optimizer, criterion, logger, test_set)
+    avg_acc = test(P, model, criterion, logger, test_set)
     """ close tensorboard """
     logger.close_writer()
 
 
 if __name__ == "__main__":
     import os
+    import warnings
+    warnings.filterwarnings(
+        "ignore",
+        message="torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly",
+        category=UserWarning
+    )
+    import torch
+    from torch import nn
 
     os.environ["OMP_NUM_THREADS"] = "1"
     os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
