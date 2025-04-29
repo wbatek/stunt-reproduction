@@ -12,7 +12,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributed as dist
-from torch.utils.tensorboard import SummaryWriter
+from tensorboardX import SummaryWriter
 
 
 class Logger(object):
