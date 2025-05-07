@@ -10,6 +10,9 @@ from data.dataset import get_meta_dataset
 from models.model import get_model
 from train.trainer import meta_trainer
 from utils import Logger, set_random_seed
+import numpy as np
+
+from data.dataset import dataset_to_tabular_size
 
 
 def get_accuracy(prototypes, test_embeddings, test_targets):
@@ -47,6 +50,11 @@ def test(P, model, criterion, logger, test_set):
     total_loss = 0
     total_tasks = 0
 
+    input_dim = dataset_to_tabular_size[P.dataset]
+    max_dim = P.max_dim
+    num_submodels = P.num_submodels
+
+    feature_subsets = [np.random.choice(input_dim, max_dim, replace=False) for _ in range(num_submodels)]
 
     with torch.no_grad():
         for i in range(P.outer_steps):
@@ -56,17 +64,36 @@ def test(P, model, criterion, logger, test_set):
             for task in batch:
                 support_inputs, support_targets = task['train']
                 query_inputs, query_targets = task['test']
-                support_inputs = support_inputs.squeeze(0)  # Shape: (num_way * shot, tabular_size)
-                query_inputs = query_inputs.squeeze(0)  # Shape: (num_way * query, tabular_size)
-                support_targets = support_targets.squeeze(0)  # Shape: (num_way * shot,)
-                query_targets = query_targets.squeeze(0)  # Shape: (num_way * query,)
+                support_inputs = support_inputs.squeeze(0).numpy()  # Shape: (num_way * shot, tabular_size)
+                query_inputs = query_inputs.squeeze(0).numpy()  # Shape: (num_way * query, tabular_size)
+                support_targets = support_targets.squeeze(0).numpy()  # Shape: (num_way * shot,)
+                query_targets = query_targets.squeeze(0).numpy()  # Shape: (num_way * query,)
 
-                model.fit(support_inputs.numpy(), support_targets.numpy())
+                all_preds = []
 
-                y_eval = model.predict(query_inputs.numpy())
+                for feature_idx in feature_subsets:
+                    model = TabPFNClassifier(device='cpu', N_ensemble_configurations=32)
+                    model.fit(support_inputs[:, feature_idx], support_targets)
+                    preds = model.predict(query_inputs[:, feature_idx])
+                    all_preds.append(preds)
 
-                correct = sum(1 for i in range(len(y_eval)) if y_eval[i] == query_targets.numpy()[i])
-                acc = correct / len(y_eval)
+                all_preds = np.array(all_preds).T
+
+                final_preds = []
+                for pred_row in all_preds:
+                    counts = np.bincount(pred_row)
+                    final_preds.append(np.argmax(counts))
+
+                #model.fit(support_inputs.numpy(), support_targets.numpy())
+
+                #y_eval = model.predict(query_inputs.numpy())
+
+                # correct = sum(1 for i in range(len(y_eval)) if y_eval[i] == query_targets.numpy()[i])
+                # acc = correct / len(y_eval)
+                # total_accuracy += acc
+                # total_tasks += 1
+                correct = sum(1 for i in range(len(final_preds)) if final_preds[i] == query_targets[i])
+                acc = correct / len(query_targets)
                 total_accuracy += acc
                 total_tasks += 1
             if i % 100 == 0:

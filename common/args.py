@@ -63,6 +63,10 @@ def parse_args(default=False):
     parser.add_argument('--model', help='model type',
                         type=str, default='mlp')
 
+    """ mine """
+    parser.add_argument('--num_submodels', help='number of submodels', default=1, type=int)
+    parser.add_argument('--max_dim', help='max dimension of each submodel', default=50, type=int)
+
     if default:
         return parser.parse_args('')  # empty string
     else:
