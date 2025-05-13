@@ -3,7 +3,6 @@ import sys
 import torch
 from tabpfn import TabPFNClassifier
 
-# from torchmeta.utils.data import BatchMetaDataLoader
 from common.args import parse_args
 from common.utils import get_optimizer, load_model
 from data.dataset import get_meta_dataset
@@ -54,7 +53,7 @@ def test(P, model, criterion, logger, test_set):
     max_dim = P.max_dim
     num_submodels = P.num_submodels
 
-    feature_subsets = [np.random.choice(input_dim, max_dim, replace=False) for _ in range(num_submodels)]
+    # feature_subsets = [np.random.choice(input_dim, max_dim, replace=False) for _ in range(num_submodels)]
 
     with torch.no_grad():
         for i in range(P.outer_steps):
@@ -69,33 +68,33 @@ def test(P, model, criterion, logger, test_set):
                 support_targets = support_targets.squeeze(0).numpy()  # Shape: (num_way * shot,)
                 query_targets = query_targets.squeeze(0).numpy()  # Shape: (num_way * query,)
 
-                all_preds = []
+                # all_preds = []
+                #
+                # for feature_idx in feature_subsets:
+                #     model = TabPFNClassifier(device='cpu', N_ensemble_configurations=32)
+                #     model.fit(support_inputs[:, feature_idx], support_targets)
+                #     preds = model.predict(query_inputs[:, feature_idx])
+                #     all_preds.append(preds)
+                #
+                # all_preds = np.array(all_preds).T
+                #
+                # final_preds = []
+                # for pred_row in all_preds:
+                #     counts = np.bincount(pred_row)
+                #     final_preds.append(np.argmax(counts))
 
-                for feature_idx in feature_subsets:
-                    model = TabPFNClassifier(device='cpu', N_ensemble_configurations=32)
-                    model.fit(support_inputs[:, feature_idx], support_targets)
-                    preds = model.predict(query_inputs[:, feature_idx])
-                    all_preds.append(preds)
+                model.fit(support_inputs, support_targets)
 
-                all_preds = np.array(all_preds).T
+                y_eval = model.predict(query_inputs)
 
-                final_preds = []
-                for pred_row in all_preds:
-                    counts = np.bincount(pred_row)
-                    final_preds.append(np.argmax(counts))
-
-                #model.fit(support_inputs.numpy(), support_targets.numpy())
-
-                #y_eval = model.predict(query_inputs.numpy())
-
-                # correct = sum(1 for i in range(len(y_eval)) if y_eval[i] == query_targets.numpy()[i])
-                # acc = correct / len(y_eval)
-                # total_accuracy += acc
-                # total_tasks += 1
-                correct = sum(1 for i in range(len(final_preds)) if final_preds[i] == query_targets[i])
-                acc = correct / len(query_targets)
+                correct = sum(1 for i in range(len(y_eval)) if y_eval[i] == query_targets[i])
+                acc = correct / len(y_eval)
                 total_accuracy += acc
                 total_tasks += 1
+                # correct = sum(1 for i in range(len(final_preds)) if final_preds[i] == query_targets[i])
+                # acc = correct / len(query_targets)
+                # total_accuracy += acc
+                # total_tasks += 1
             if i % 100 == 0:
                 avg_accuracy = total_accuracy / total_tasks
                 print(f"Step {i}, Average accuracy: {avg_accuracy:.4f}")
@@ -154,7 +153,7 @@ def main(rank, P):
     load_model(P, model, logger)
 
     """ train """
-    #meta_trainer(P, train_func, test_func, model, train_loader, test_loader, logger)
+    meta_trainer(P, train_func, test_func, model, train_loader, test_loader, logger)
     """ test """
     criterion = nn.CrossEntropyLoss()
 
