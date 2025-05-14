@@ -42,7 +42,7 @@ def get_accuracy(prototypes, test_embeddings, test_targets):
     return accuracy
 
 
-def test(P, model, criterion, logger, test_set):
+def test(P, model, criterion, logger, test_set, feature_subsets=None):
     accuracies = []
 
     total_accuracy = 0
@@ -52,8 +52,6 @@ def test(P, model, criterion, logger, test_set):
     input_dim = dataset_to_tabular_size[P.dataset]
     max_dim = P.max_dim
     num_submodels = P.num_submodels
-
-    # feature_subsets = [np.random.choice(input_dim, max_dim, replace=False) for _ in range(num_submodels)]
 
     with torch.no_grad():
         for i in range(P.outer_steps):
@@ -68,33 +66,29 @@ def test(P, model, criterion, logger, test_set):
                 support_targets = support_targets.squeeze(0).numpy()  # Shape: (num_way * shot,)
                 query_targets = query_targets.squeeze(0).numpy()  # Shape: (num_way * query,)
 
-                # all_preds = []
-                #
-                # for feature_idx in feature_subsets:
-                #     model = TabPFNClassifier(device='cpu', N_ensemble_configurations=32)
-                #     model.fit(support_inputs[:, feature_idx], support_targets)
-                #     preds = model.predict(query_inputs[:, feature_idx])
-                #     all_preds.append(preds)
-                #
-                # all_preds = np.array(all_preds).T
-                #
-                # final_preds = []
-                # for pred_row in all_preds:
-                #     counts = np.bincount(pred_row)
-                #     final_preds.append(np.argmax(counts))
-
-                model.fit(support_inputs, support_targets)
-
-                y_eval = model.predict(query_inputs)
-
-                correct = sum(1 for i in range(len(y_eval)) if y_eval[i] == query_targets[i])
-                acc = correct / len(y_eval)
-                total_accuracy += acc
-                total_tasks += 1
-                # correct = sum(1 for i in range(len(final_preds)) if final_preds[i] == query_targets[i])
-                # acc = correct / len(query_targets)
-                # total_accuracy += acc
-                # total_tasks += 1
+                # if multiple models passed, then ensemble them
+                if isinstance(model, list):
+                    all_preds = []
+                    for i, submodel in enumerate(model):
+                        submodel.fit(support_inputs[:, feature_subsets[i]], support_targets)
+                        preds = submodel.predict(query_inputs[:, feature_subsets[i]])
+                        all_preds.append(preds)
+                    all_preds = np.array(all_preds).T
+                    final_preds = []
+                    for pred_row in all_preds:
+                        counts = np.bincount(pred_row)
+                        final_preds.append(np.argmax(counts))
+                    correct = sum(1 for i in range(len(final_preds)) if final_preds[i] == query_targets[i])
+                    acc = correct / len(query_targets)
+                    total_accuracy += acc
+                    total_tasks += 1
+                else:
+                    model.fit(support_inputs, support_targets)
+                    y_eval = model.predict(query_inputs)
+                    correct = sum(1 for i in range(len(y_eval)) if y_eval[i] == query_targets[i])
+                    acc = correct / len(y_eval)
+                    total_accuracy += acc
+                    total_tasks += 1
             if i % 100 == 0:
                 avg_accuracy = total_accuracy / total_tasks
                 print(f"Step {i}, Average accuracy: {avg_accuracy:.4f}")
@@ -134,8 +128,17 @@ def main(rank, P):
     train_loader = train_set
     test_loader = val_set
 
+    input_dim = dataset_to_tabular_size[P.dataset]
+    max_dim = P.max_dim
+    num_submodels = P.num_submodels
+
     """ Initialize model, optimizer, loss_scalar (for amp) and scheduler """
-    model = TabPFNClassifier(device='cpu', N_ensemble_configurations=32)
+    if num_submodels > 1:
+        model = [TabPFNClassifier(device=device, N_ensemble_configurations=10) for _ in range(P.num_submodels)]
+        feature_subsets = [np.random.choice(input_dim, max_dim, replace=False) for _ in range(num_submodels)]
+    else:
+        model = TabPFNClassifier(device=device, N_ensemble_configurations=10)
+        feature_subsets = None
     # optimizer = get_optimizer(P, model)
 
     """ define train and test type """
@@ -153,11 +156,11 @@ def main(rank, P):
     load_model(P, model, logger)
 
     """ train """
-    meta_trainer(P, train_func, test_func, model, train_loader, test_loader, logger)
+    meta_trainer(P, train_func, test_func, model, train_loader, test_loader, logger, feature_subsets=feature_subsets)
     """ test """
     criterion = nn.CrossEntropyLoss()
 
-    avg_acc = test(P, model, criterion, logger, test_set)
+    avg_acc = test(P, model, criterion, logger, test_set, feature_subsets=feature_subsets)
     """ close tensorboard """
     logger.close_writer()
 
