@@ -20,6 +20,9 @@ dataset_to_num_classes = {
     'electricity': 2,
     'nomao': 2,
     'gas-drift': 6,
+    'balance-scale': 3,
+    'blood-transfusion': 2,
+    'morphological': 10,
 }
 
 dataset_to_tabular_size = {
@@ -36,6 +39,9 @@ dataset_to_tabular_size = {
     'electricity': 13,
     'nomao': 174,
     'gas-drift': 128,
+    'balance-scale': 4,
+    'blood-transfusion': 4,
+    'morphological': 6,
 }
 
 def get_meta_dataset(P, dataset):
