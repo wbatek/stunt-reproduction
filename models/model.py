@@ -14,6 +14,9 @@ dataset_to_in = {
     'electricity': 13,
     'nomao': 174,
     'gas-drift': 128,
+    'morphological': 6,
+    'blood-transfusion': 4,
+    'balance-scale': 4,
 }
 
 
