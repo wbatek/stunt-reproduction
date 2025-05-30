@@ -17,6 +17,8 @@ dataset_to_in = {
     'morphological': 6,
     'blood-transfusion': 4,
     'balance-scale': 4,
+    'pc1': 21,
+    'qsar': 41,
 }
 
 

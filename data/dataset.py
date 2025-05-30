@@ -23,6 +23,8 @@ dataset_to_num_classes = {
     'balance-scale': 3,
     'blood-transfusion': 2,
     'morphological': 10,
+    'pc1': 2,
+    'qsar': 2
 }
 
 dataset_to_tabular_size = {
@@ -42,6 +44,8 @@ dataset_to_tabular_size = {
     'balance-scale': 4,
     'blood-transfusion': 4,
     'morphological': 6,
+    'pc1': 21,
+    'qsar': 41
 }
 
 def get_meta_dataset(P, dataset):
