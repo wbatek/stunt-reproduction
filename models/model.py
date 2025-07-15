@@ -19,7 +19,9 @@ dataset_to_in = {
     'balance-scale': 4,
     'pc1': 21,
     'qsar': 41,
-    'pc4': 37
+    'pc4': 37,
+    'krvskp': 73,
+    'letter': 16,
 }
 
 

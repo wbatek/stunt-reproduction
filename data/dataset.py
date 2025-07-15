@@ -25,7 +25,9 @@ dataset_to_num_classes = {
     'morphological': 10,
     'pc1': 2,
     'qsar': 2,
-    'pc4': 2
+    'pc4': 2,
+    'krvskp': 2,
+    'letter': 26
 }
 
 dataset_to_tabular_size = {
@@ -47,7 +49,9 @@ dataset_to_tabular_size = {
     'morphological': 6,
     'pc1': 21,
     'qsar': 41,
-    'pc4': 37
+    'pc4': 37,
+    'krvskp': 73,
+    'letter': 16
 }
 
 def get_meta_dataset(P, dataset):
