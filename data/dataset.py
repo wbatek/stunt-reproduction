@@ -27,7 +27,9 @@ dataset_to_num_classes = {
     'qsar': 2,
     'pc4': 2,
     'krvskp': 2,
-    'letter': 26
+    'letter': 26,
+    'factors': 10,
+    'zernike': 10
 }
 
 dataset_to_tabular_size = {
@@ -51,7 +53,9 @@ dataset_to_tabular_size = {
     'qsar': 41,
     'pc4': 37,
     'krvskp': 73,
-    'letter': 16
+    'letter': 16,
+    'factors': 216,
+    'zernike': 47
 }
 
 def get_meta_dataset(P, dataset):

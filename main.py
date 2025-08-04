@@ -8,7 +8,9 @@ from torchmeta.utils.prototype import get_prototypes
 
 from common.args import parse_args
 from common.utils import get_optimizer, load_model
+from data import pretrain_dataset
 from data.dataset import get_meta_dataset
+from models.joing_embeddings_models import EncoderF
 from models.model import get_model
 from train.trainer import meta_trainer
 from utils import Logger, set_random_seed
@@ -78,7 +80,6 @@ def test(P, model, optimizer, criterion, logger, test_set):
                 print(f"Step {i}, Average accuracy: {avg_accuracy:.4f}")
                 logger.log(f"Step {i}, Avg Accuracies = {avg_accuracy:.4f}")
 
-
     avg_accuracy = total_accuracy / total_tasks
     avg_loss = total_loss / total_tasks
     print(f"Average Accuracy: {avg_accuracy:.4f}")
@@ -89,6 +90,81 @@ def test(P, model, optimizer, criterion, logger, test_set):
     logger.log(avg_accuracy)
     logger.log(avg_loss)
     return avg_accuracy
+
+
+def pretrain(P):
+    from torch.utils.data import DataLoader
+    from data.pretrain_dataset import PretrainDataset
+    from models.joing_embeddings_models import EncoderF, ProjectorP
+    import torch.nn.functional as F
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    dataset = PretrainDataset(f'./data/{P.dataset}/train_x.npy', mask_ratio=0.2)
+    loader = DataLoader(dataset, batch_size=P.batch_size, shuffle=True, num_workers=4)
+
+    f = EncoderF(input_dim=dataset.D).to(device)
+    p = ProjectorP(embed_dim=256, input_dim=dataset.D).to(device)
+    optimizer = torch.optim.Adam(list(f.parameters()) + list(p.parameters()), lr=P.lr)
+
+    for epoch in range(100):
+        total_loss = 0.0
+        valid_batches = 0
+
+        for batch in loader:
+            x_input = batch['x_input'].to(device)  # x[S']
+            x_full = batch['x_full'].to(device)  # original x
+            mask = batch['mask'].to(device)  # binary mask
+
+            # Forward pass
+            z = f(x_input)
+            h = p(z, mask)
+            h = F.normalize(h, dim=1, eps=1e-8)
+
+            x_hidden = x_full * (1 - mask)
+            x_hidden = F.normalize(x_hidden, dim=1, eps=1e-8)
+
+            sim = torch.matmul(x_hidden, x_hidden.t())
+
+            sim = sim - torch.diag(torch.ones(sim.size(0), device=device) * float('inf'))
+
+            valid_rows = (x_hidden.abs().sum(dim=1) > 1e-6)
+            invalid_rows = (valid_rows == False)
+
+            sim = sim.masked_fill(invalid_rows.unsqueeze(1), -float('inf'))
+            sim = sim.masked_fill(invalid_rows.unsqueeze(0), -float('inf'))
+
+            pos_idx = torch.argmax(sim, dim=1)
+            max_sim = torch.gather(sim, 1, pos_idx.unsqueeze(1)).squeeze()
+            valid_pairs = (max_sim > -float('inf')) & valid_rows
+
+
+            if not valid_pairs.any():
+                continue
+
+            logits = torch.matmul(h, h.t()) / 0.1
+            logits.fill_diagonal_(-float('inf'))
+
+            loss = F.cross_entropy(logits[valid_pairs], pos_idx[valid_pairs])
+
+            # Optimization
+            optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(list(f.parameters()) + list(p.parameters()), 1.0)
+            optimizer.step()
+
+            total_loss += loss.item()
+            valid_batches += 1
+
+        # Print epoch stats
+        if valid_batches > 0:
+            avg_loss = total_loss / valid_batches
+            print(f"[Epoch {epoch + 1}] Loss: {avg_loss:.6f}")
+        else:
+            print(f"[Epoch {epoch + 1}] Warning: No valid batches")
+
+    torch.save({'f': f.state_dict(), 'p': p.state_dict()}, 'f_p_pretrained.pt')
+    print("SAVED")
 
 
 def main(rank, P):
@@ -104,6 +180,11 @@ def main(rank, P):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = True
 
+    """ pretraining """
+    print("Starting pretraining...")
+    pretrain(P)
+    print("Ended pretraining")
+
     """ define dataset and dataloader """
     # kwargs = {'batch_size': P.batch_size, 'shuffle': True,
     #           'pin_memory': True, 'num_workers': 2}
@@ -113,7 +194,11 @@ def main(rank, P):
     test_loader = val_set
 
     """ Initialize model, optimizer, loss_scalar (for amp) and scheduler """
-    model = get_model(P, P.model).to(device)
+    #model = get_model(P, P.model).to(device)
+    model = EncoderF(input_dim=train_set.tabular_size).to(device)
+    checkpoint = torch.load('f_p_pretrained.pt')
+    model.load_state_dict(checkpoint['f'])
+    model.to(device)
     optimizer = get_optimizer(P, model)
 
     """ define train and test type """
@@ -128,7 +213,7 @@ def main(rank, P):
     logger.log(model)
 
     """ load model if necessary """
-    load_model(P, model, logger)
+    # load_model(P, model, logger)
 
     """ train """
     meta_trainer(P, train_func, test_func, model, optimizer, train_loader, test_loader, logger)

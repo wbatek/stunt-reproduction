@@ -22,6 +22,8 @@ dataset_to_in = {
     'pc4': 37,
     'krvskp': 73,
     'letter': 16,
+    'factors': 216,
+    'zernike': 47
 }
 
 
@@ -29,18 +31,6 @@ def get_model(P, modelstr):
 
     if modelstr == 'mlp':
         if 'protonet' in P.mode:
-            # if P.dataset == 'income':
-            #     model = MLPProto(105, 1024, 1024)
-            # elif P.dataset == 'diabetes':
-            #     model = MLPProto(8, 1024, 1024)
-            # elif P.dataset == 'optdigits':
-            #     model = MLPProto(64, 1024, 1024)
-            # elif P.dataset == 'cmc':
-            #     model = MLPProto(9, 1024, 1024)
-            # elif P.dataset == 'dna':
-            #     model = MLPProto(180, 1024, 1024)
-            # elif P.dataset == 'karhunen':
-            #     model = MLPProto(64, 1024, 1024)
             model = MLPProto(dataset_to_in[P.dataset], 1024, 1024)
     else:
         raise NotImplementedError()
