@@ -92,6 +92,8 @@ def test(P, model, optimizer, criterion, logger, test_set):
     return avg_accuracy
 
 
+### PRETRAIN ###
+
 def pretrain(P):
     from torch.utils.data import DataLoader
     from data.pretrain_dataset import PretrainDataset
@@ -137,7 +139,6 @@ def pretrain(P):
             pos_idx = torch.argmax(sim, dim=1)
             max_sim = torch.gather(sim, 1, pos_idx.unsqueeze(1)).squeeze()
             valid_pairs = (max_sim > -float('inf')) & valid_rows
-
 
             if not valid_pairs.any():
                 continue
